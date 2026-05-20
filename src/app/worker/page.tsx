@@ -23,8 +23,13 @@ export default function WorkerPage() {
 
   async function init() {
     const { data: { user } } = await supabase.auth.getUser()
+
     if (!user) return
+
     setUser(user)
+
+    if (!user.email) return
+
     await loadReviews(user.email)
   }
 
@@ -41,11 +46,20 @@ export default function WorkerPage() {
   async function handleAdd() {
     if (!user) return
 
+    if (!user.email) return
+
     setLoading(true)
     setMessage('')
 
-    const unas = unasText.split('\n').map(n => n.trim()).filter(n => n !== '')
-    const seguros = segurosText.split('\n').map(n => n.trim()).filter(n => n !== '')
+    const unas = unasText
+      .split('\n')
+      .map(n => n.trim())
+      .filter(n => n !== '')
+
+    const seguros = segurosText
+      .split('\n')
+      .map(n => n.trim())
+      .filter(n => n !== '')
 
     const inserts = [
       ...unas.map(name => ({
@@ -55,6 +69,7 @@ export default function WorkerPage() {
         review_text: '',
         rating: 5
       })),
+
       ...seguros.map(name => ({
         client_name: name,
         worker_email: user.email.toLowerCase(),
@@ -71,7 +86,9 @@ export default function WorkerPage() {
       return
     }
 
-    const { error } = await supabase.from('reviews').insert(inserts)
+    const { error } = await supabase
+      .from('reviews')
+      .insert(inserts)
 
     if (error) {
       setMessage('Error al guardar')
@@ -82,10 +99,12 @@ export default function WorkerPage() {
 
     setUnasText('')
     setSegurosText('')
+
     setMessage('Datos guardados correctamente')
     setMessageType('success')
 
     await loadReviews(user.email)
+
     setLoading(false)
 
     setTimeout(() => setMessage(''), 3000)
@@ -108,7 +127,10 @@ export default function WorkerPage() {
             <span className="bg-gradient-to-r from-white via-emerald-300 to-emerald-500 bg-clip-text text-transparent drop-shadow-[0_0_30px_rgba(16,185,129,0.5)]">
               Easy Money
             </span>
-            <span className="ml-3 text-4xl text-emerald-400">🤑</span>
+
+            <span className="ml-3 text-4xl text-emerald-400 animate-bounce">
+              🤑
+            </span>
           </h1>
 
           {user && (
@@ -204,11 +226,13 @@ export default function WorkerPage() {
                     {r.client_name}
                   </span>
 
-                  <span className={`text-sm uppercase tracking-widest ${
-                    r.service_type === 'unas'
-                      ? 'text-pink-400'
-                      : 'text-cyan-400'
-                  }`}>
+                  <span
+                    className={`text-sm uppercase tracking-widest ${
+                      r.service_type === 'unas'
+                        ? 'text-pink-400'
+                        : 'text-cyan-400'
+                    }`}
+                  >
                     {r.service_type}
                   </span>
                 </div>
