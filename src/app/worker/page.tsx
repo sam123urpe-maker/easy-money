@@ -194,7 +194,7 @@ export default function WorkerPage() {
   return (
     <main className="min-h-screen bg-[#0a0a0f] text-white px-6 py-16 flex justify-center relative overflow-hidden">
 
-      {/* FLOATING KEYFRAMES (solo para Joaquín) */}
+      {/* KEYFRAMES PARA EL EFECTO FLOTANTE */}
       <style>{`
         @keyframes floatEmoji {
           0%   { transform: translateY(0px) rotate(-5deg); }
@@ -203,21 +203,39 @@ export default function WorkerPage() {
         }
       `}</style>
 
-      {/* JOAQUIN - IMAGEN GRANDE FIJA ARRIBA CON EFECTO FLOTANTE Y RESPLANDOR VERDE */}
-      {isJoaquin && (
+      {/* IMAGEN DE DOUGLAS - FIJA CENTRADA CON EFECTO FLOTANTE */}
+      {isDouglas && (
         <div
-          className="fixed top-6 left-1/2 transform -translate-x-1/2 z-30 select-none pointer-events-none"
+          className="fixed top-32 left-1/2 transform -translate-x-1/2 z-30 select-none pointer-events-none"
           style={{
             animation: 'floatEmoji 3.5s ease-in-out infinite',
           }}
         >
           <div className="relative">
-            {/* Glow verde intenso */}
-            <div className="absolute inset-0 bg-green-500/40 blur-3xl rounded-full w-[280px] h-[280px] md:w-[360px] md:h-[360px]" />
+            <div className="absolute inset-0 bg-emerald-500/20 blur-3xl rounded-full w-[550px] h-[550px]" />
+            <img
+              src="https://i.postimg.cc/cCFwBFKQ/4d8180fd-fd29-4e5b-babe-28459bf9cb68.png"
+              alt="Douglas"
+              className="relative w-[520px] object-contain drop-shadow-[0_0_80px_rgba(16,185,129,0.4)]"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* IMAGEN DE JOAQUIN - FIJA CENTRADA CON EFECTO FLOTANTE (mismo tamaño y estilo que Douglas) */}
+      {isJoaquin && (
+        <div
+          className="fixed top-32 left-1/2 transform -translate-x-1/2 z-30 select-none pointer-events-none"
+          style={{
+            animation: 'floatEmoji 3.5s ease-in-out infinite',
+          }}
+        >
+          <div className="relative">
+            <div className="absolute inset-0 bg-emerald-500/20 blur-3xl rounded-full w-[550px] h-[550px]" />
             <img
               src="https://i.postimg.cc/6ph8D0Kg/4e1775c7-7f98-4d9e-8cd6-11c1110d4eaa.png"
               alt="Joaquin"
-              className="relative w-[240px] md:w-[320px] object-contain drop-shadow-[0_0_50px_rgba(34,197,94,0.7)]"
+              className="relative w-[520px] object-contain drop-shadow-[0_0_80px_rgba(16,185,129,0.4)]"
             />
           </div>
         </div>
@@ -225,7 +243,7 @@ export default function WorkerPage() {
 
       <div className="w-full max-w-7xl">
 
-        {/* HEADER */}
+        {/* HEADER - TÍTULO CENTRADO */}
         <div className="text-center mb-20">
           <h1 className="text-6xl md:text-7xl font-black tracking-tight">
             <span className="bg-gradient-to-r from-white via-emerald-300 to-emerald-500 bg-clip-text text-transparent drop-shadow-[0_0_30px_rgba(16,185,129,0.5)]">
@@ -239,20 +257,6 @@ export default function WorkerPage() {
             </p>
           )}
         </div>
-
-        {/* DOUGLAS IMAGE (estática, sin emoji flotante) */}
-        {isDouglas && (
-          <div className="flex justify-center mb-32">
-            <div className="relative">
-              <div className="absolute inset-0 bg-emerald-500/20 blur-3xl rounded-full w-[550px] h-[550px]" />
-              <img
-                src="https://i.postimg.cc/cCFwBFKQ/4d8180fd-fd29-4e5b-babe-28459bf9cb68.png"
-                alt="Douglas"
-                className="relative w-[520px] object-contain drop-shadow-[0_0_80px_rgba(16,185,129,0.4)]"
-              />
-            </div>
-          </div>
-        )}
 
         {/* CLOSED SYSTEM MESSAGE */}
         {isSystemClosed && (
@@ -303,8 +307,8 @@ export default function WorkerPage() {
 
               <textarea
                 disabled={isSystemClosed}
-                className="w-full h-48 rounded-xl border border-slate-800 bg-black px-5 py-4 text-white outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 resize-none transition disabled:opacity-50 disabled:cursor-not-allowed"
-                placeholder="Juan&#10;Maria&#10;Carlos"
+                className="w-full h-48 rounded-xl border border-slate-800 bg-black px-5 py-4 text-white outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 resize-none transition disabled:opacity-50 disabled:cursor-not-allowed font-mono"
+                placeholder="Juan\nMaría\nCarlos"
                 value={unasText}
                 onChange={(e) => setUnasText(e.target.value)}
               />
@@ -356,8 +360,8 @@ export default function WorkerPage() {
 
               <textarea
                 disabled={isSystemClosed}
-                className="w-full h-48 rounded-xl border border-slate-800 bg-black px-5 py-4 text-white outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 resize-none transition disabled:opacity-50 disabled:cursor-not-allowed"
-                placeholder="Pedro&#10;Luis&#10;Ana"
+                className="w-full h-48 rounded-xl border border-slate-800 bg-black px-5 py-4 text-white outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 resize-none transition disabled:opacity-50 disabled:cursor-not-allowed font-mono"
+                placeholder="Pedro\nLuis\nAna"
                 value={segurosText}
                 onChange={(e) => setSegurosText(e.target.value)}
               />
