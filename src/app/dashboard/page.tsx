@@ -10,6 +10,8 @@ export default function DashboardPage() {
   const [message, setMessage] = useState('')
   const [messageType, setMessageType] = useState<'success' | 'error' | 'warning'>('success')
   const [showNewWorkerModal, setShowNewWorkerModal] = useState(false)
+  const [showResetModal, setShowResetModal] = useState(false)
+  const [copiedButton, setCopiedButton] = useState<string | null>(null)
   const [newWorkerForm, setNewWorkerForm] = useState({
     name: '',
     email: '',
@@ -104,15 +106,14 @@ export default function DashboardPage() {
 
   const penToUsd = (pen: number) => (pen / USD_TO_PEN).toFixed(2)
 
-  async function handleResetWeekly() {
-    if (!confirm('⚠️ ATENCIÓN: ¿Eliminar TODAS las reviews? Esta acción no se puede deshacer.')) return
-
+  async function handleConfirmReset() {
     setLoading(true)
     const { error } = await supabase.from('reviews').delete().neq('id', '')
 
     if (!error) {
       setMessage('✅ Reviews eliminadas correctamente')
       setMessageType('success')
+      setShowResetModal(false)
       await fetchData()
     } else {
       setMessage('❌ Error al eliminar reviews')
@@ -153,11 +154,13 @@ export default function DashboardPage() {
     setLoading(false)
   }
 
-  async function copyToClipboard(text: string) {
+  async function copyToClipboard(text: string, buttonId: string) {
     await navigator.clipboard.writeText(text)
+    setCopiedButton(buttonId)
     setMessage('📋 Copiado al portapapeles')
     setMessageType('success')
     setTimeout(() => setMessage(''), 2000)
+    setTimeout(() => setCopiedButton(null), 1500)
   }
 
   const formatListForCopy = (reviewList: any[]) => {
@@ -322,10 +325,14 @@ export default function DashboardPage() {
                 <span>Uñas</span>
               </h3>
               <button
-                onClick={() => copyToClipboard(formatListForCopy(unasReviews))}
-                className="px-4 py-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-400 text-sm font-semibold hover:bg-emerald-500/20 hover:border-emerald-500/50 transition-all duration-300"
+                onClick={() => copyToClipboard(formatListForCopy(unasReviews), 'unas')}
+                className={`px-4 py-2 border rounded-lg text-sm font-semibold transition-all duration-300 ${
+                  copiedButton === 'unas'
+                    ? 'bg-emerald-500/30 border-emerald-500/50 text-emerald-300 scale-105'
+                    : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/50'
+                }`}
               >
-                📋 Copiar
+                {copiedButton === 'unas' ? '✅ ¡Copiado!' : '📋 Copiar'}
               </button>
             </div>
 
@@ -367,10 +374,14 @@ export default function DashboardPage() {
                 <span>Seguros</span>
               </h3>
               <button
-                onClick={() => copyToClipboard(formatListForCopy(segurosReviews))}
-                className="px-4 py-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-400 text-sm font-semibold hover:bg-emerald-500/20 hover:border-emerald-500/50 transition-all duration-300"
+                onClick={() => copyToClipboard(formatListForCopy(segurosReviews), 'seguros')}
+                className={`px-4 py-2 border rounded-lg text-sm font-semibold transition-all duration-300 ${
+                  copiedButton === 'seguros'
+                    ? 'bg-emerald-500/30 border-emerald-500/50 text-emerald-300 scale-105'
+                    : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/50'
+                }`}
               >
-                📋 Copiar
+                {copiedButton === 'seguros' ? '✅ ¡Copiado!' : '📋 Copiar'}
               </button>
             </div>
 
@@ -404,10 +415,116 @@ export default function DashboardPage() {
 
         </div>
 
+        {/* SECTION TITLE - WORKERS */}
+        <div className="flex items-center gap-4 mb-6">
+          <h2 className="text-slate-300 text-lg font-semibold tracking-wide uppercase">
+            Workers
+          </h2>
+          <div className="flex-1 h-px bg-slate-800" />
+          <span className="text-slate-600 text-sm">{workersArray.length} activos</span>
+        </div>
+
+        {/* WORKERS GRID */}
+        <div className="grid gap-5 md:grid-cols-3 mb-12">
+          {workersArray.map((worker: any) => (
+            <div
+              key={worker.name}
+              className="bg-gradient-to-br from-slate-900 to-[#0d0d14] border border-slate-800 p-7 rounded-2xl hover:border-emerald-500/30 transition-all duration-300"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/10 border border-emerald-500/20 flex items-center justify-center text-lg font-black text-emerald-400 capitalize">
+                  {worker.name.charAt(0)}
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold capitalize text-white tracking-tight">
+                    {worker.name}
+                  </h2>
+                  <p className="text-slate-600 text-xs">
+                    {worker.seguros + worker.unas} servicios totales
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mb-6">
+                <div className="bg-slate-800/50 rounded-xl p-3 text-center">
+                  <p className="text-slate-500 text-xs mb-1">Seguros</p>
+                  <p className="text-white font-black text-2xl">{worker.seguros}</p>
+                </div>
+                <div className="bg-slate-800/50 rounded-xl p-3 text-center">
+                  <p className="text-slate-500 text-xs mb-1">Uñas</p>
+                  <p className="text-white font-black text-2xl">{worker.unas}</p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex justify-between items-center py-2 px-3 rounded-lg bg-emerald-500/5 border border-emerald-500/10">
+                  <span className="text-slate-400 text-sm">Generado</span>
+                  <div className="text-right">
+                    <p className="text-emerald-400 font-bold text-sm">
+                      S/ {worker.generated.toFixed(2)}
+                    </p>
+                    <p className="text-slate-600 text-xs font-mono">
+                      ${penToUsd(worker.generated)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center py-2 px-3 rounded-lg bg-red-500/5 border border-red-500/10">
+                  <span className="text-slate-400 text-sm">Pagado</span>
+                  <div className="text-right">
+                    <p className="text-red-400 font-bold text-sm">
+                      S/ {worker.paid.toFixed(2)}
+                    </p>
+                    <p className="text-slate-600 text-xs font-mono">
+                      ${penToUsd(worker.paid)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center py-2.5 px-3 rounded-xl bg-cyan-500/5 border border-cyan-500/20">
+                  <span className="text-cyan-300 text-sm font-semibold">Ganancia</span>
+                  <div className="text-right">
+                    <p className="text-cyan-400 font-black text-base">
+                      S/ {worker.profit.toFixed(2)}
+                    </p>
+                    <p className="text-slate-500 text-xs font-mono">
+                      ${penToUsd(worker.profit)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5">
+                <div className="flex justify-between text-xs text-slate-600 mb-1.5">
+                  <span>Margen</span>
+                  <span>
+                    {worker.generated > 0
+                      ? ((worker.profit / worker.generated) * 100).toFixed(0)
+                      : 0}
+                    %
+                  </span>
+                </div>
+                <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-cyan-600 to-emerald-400 rounded-full transition-all duration-700"
+                    style={{
+                      width: `${
+                        worker.generated > 0
+                          ? Math.max(0, (worker.profit / worker.generated) * 100)
+                          : 0
+                      }%`,
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
         {/* BUTTONS SECTION */}
         <div className="flex flex-col md:flex-row gap-4 mb-12">
           <button
-            onClick={handleResetWeekly}
+            onClick={() => setShowResetModal(true)}
             disabled={loading}
             className="flex-1 px-6 py-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 font-bold text-base hover:bg-red-500/20 hover:border-red-500/50 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 uppercase tracking-wide"
           >
