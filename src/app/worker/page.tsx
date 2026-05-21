@@ -194,38 +194,7 @@ export default function WorkerPage() {
   return (
     <main className="min-h-screen bg-[#0a0a0f] text-white px-6 py-16 flex justify-center relative overflow-hidden">
 
-      {/* FLOATING EMOJI - DOUGLAS */}
-      {isDouglas && (
-        <div
-          className="fixed bottom-10 right-10 z-20 select-none pointer-events-none"
-          style={{
-            fontSize: '4rem',
-            animation: 'floatEmoji 3s ease-in-out infinite',
-            filter: 'drop-shadow(0 0 20px rgba(52,211,153,0.6))',
-          }}
-        >
-          🤑
-        </div>
-      )}
-
-      {/* FLOATING IMAGE - JOAQUIN */}
-      {isJoaquin && (
-        <div
-          className="fixed bottom-10 left-10 z-20 select-none pointer-events-none"
-          style={{
-            animation: 'floatEmoji 3.5s ease-in-out infinite',
-            filter: 'drop-shadow(0 0 25px rgba(59,130,246,0.6))',
-          }}
-        >
-          <img
-            src="https://i.postimg.cc/6ph8D0Kg/4e1775c7-7f98-4d9e-8cd6-11c1110d4eaa.png"
-            alt="Joaquin"
-            style={{ width: '160px', height: 'auto' }}
-          />
-        </div>
-      )}
-
-      {/* FLOAT KEYFRAMES */}
+      {/* FLOATING KEYFRAMES (solo para Joaquín) */}
       <style>{`
         @keyframes floatEmoji {
           0%   { transform: translateY(0px) rotate(-5deg); }
@@ -233,6 +202,26 @@ export default function WorkerPage() {
           100% { transform: translateY(0px) rotate(-5deg); }
         }
       `}</style>
+
+      {/* JOAQUIN - IMAGEN GRANDE FIJA ARRIBA CON EFECTO FLOTANTE Y RESPLANDOR VERDE */}
+      {isJoaquin && (
+        <div
+          className="fixed top-6 left-1/2 transform -translate-x-1/2 z-30 select-none pointer-events-none"
+          style={{
+            animation: 'floatEmoji 3.5s ease-in-out infinite',
+          }}
+        >
+          <div className="relative">
+            {/* Glow verde intenso */}
+            <div className="absolute inset-0 bg-green-500/40 blur-3xl rounded-full w-[280px] h-[280px] md:w-[360px] md:h-[360px]" />
+            <img
+              src="https://i.postimg.cc/6ph8D0Kg/4e1775c7-7f98-4d9e-8cd6-11c1110d4eaa.png"
+              alt="Joaquin"
+              className="relative w-[240px] md:w-[320px] object-contain drop-shadow-[0_0_50px_rgba(34,197,94,0.7)]"
+            />
+          </div>
+        </div>
+      )}
 
       <div className="w-full max-w-7xl">
 
@@ -251,7 +240,7 @@ export default function WorkerPage() {
           )}
         </div>
 
-        {/* DOUGLAS IMAGE */}
+        {/* DOUGLAS IMAGE (estática, sin emoji flotante) */}
         {isDouglas && (
           <div className="flex justify-center mb-32">
             <div className="relative">
