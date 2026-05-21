@@ -311,7 +311,6 @@ export default function WorkerPage() {
               <div className="mt-4 p-5 bg-emerald-500/5 border border-emerald-500/10 rounded-xl">
                 <p className="text-slate-400 text-sm mb-2 font-semibold">Total ganado en Uñas</p>
                 <p className="text-3xl font-black text-emerald-400">S/ {totalUnasEarned.toFixed(2)}</p>
-                <p className="text-slate-600 text-xs mt-1 font-mono">≈ ${(totalUnasEarned / USD_TO_PEN).toFixed(2)} USD</p>
               </div>
             </div>
 
@@ -364,7 +363,6 @@ export default function WorkerPage() {
               <div className="mt-4 p-5 bg-emerald-500/5 border border-emerald-500/10 rounded-xl">
                 <p className="text-slate-400 text-sm mb-2 font-semibold">Total ganado en Seguros</p>
                 <p className="text-3xl font-black text-emerald-400">S/ {totalSegurosEarned.toFixed(2)}</p>
-                <p className="text-slate-600 text-xs mt-1 font-mono">≈ ${(totalSegurosEarned / USD_TO_PEN).toFixed(2)} USD</p>
               </div>
             </div>
 
