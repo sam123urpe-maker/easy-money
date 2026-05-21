@@ -17,6 +17,7 @@ export default function WorkerPage() {
   const [timeUntilOpen, setTimeUntilOpen] = useState<{hours: number; minutes: number; seconds: number} | null>(null)
 
   const isDouglas = user?.email?.toLowerCase() === 'douglas@easymoney.com'
+  const isJoaquin = user?.email?.toLowerCase() === 'joaquin@easymoney.com'
   const USD_TO_PEN = 3.4
 
   useEffect(() => {
@@ -204,6 +205,23 @@ export default function WorkerPage() {
           }}
         >
           🤑
+        </div>
+      )}
+
+      {/* FLOATING IMAGE - JOAQUIN */}
+      {isJoaquin && (
+        <div
+          className="fixed bottom-10 left-10 z-20 select-none pointer-events-none"
+          style={{
+            animation: 'floatEmoji 3.5s ease-in-out infinite',
+            filter: 'drop-shadow(0 0 25px rgba(59,130,246,0.6))',
+          }}
+        >
+          <img
+            src="https://i.postimg.cc/6ph8D0Kg/4e1775c7-7f98-4d9e-8cd6-11c1110d4eaa.png"
+            alt="Joaquin"
+            style={{ width: '160px', height: 'auto' }}
+          />
         </div>
       )}
 
