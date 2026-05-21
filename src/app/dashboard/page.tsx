@@ -5,7 +5,17 @@ import { supabase } from '@/lib/supabase'
 
 export default function DashboardPage() {
   const [data, setData] = useState<any[]>([])
+  const [workers, setWorkers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [message, setMessage] = useState('')
+  const [messageType, setMessageType] = useState<'success' | 'error' | 'warning'>('success')
+  const [showNewWorkerModal, setShowNewWorkerModal] = useState(false)
+  const [newWorkerForm, setNewWorkerForm] = useState({
+    name: '',
+    email: '',
+    pago_unas: '',
+    pago_seguros: ''
+  })
 
   const USD_TO_PEN = 3.4
 
@@ -14,8 +24,11 @@ export default function DashboardPage() {
   }, [])
 
   async function fetchData() {
-    const { data, error } = await supabase.from('reviews').select('*')
-    if (!error) setData(data || [])
+    const { data: reviewsData } = await supabase.from('reviews').select('*')
+    const { data: workersData } = await supabase.from('workers').select('*')
+    
+    setData(reviewsData || [])
+    setWorkers(workersData || [])
     setLoading(false)
   }
 
@@ -26,8 +39,12 @@ export default function DashboardPage() {
     const service = item.service_type || 'uñas'
 
     if (!workersMap[worker]) {
+      const workerData = workers.find(w => w.email?.toLowerCase() === item.worker_email?.toLowerCase())
+      const name = workerData?.name || worker
+
       workersMap[worker] = {
-        name: worker,
+        name: name,
+        email: item.worker_email,
         seguros: 0,
         unas: 0,
         generated: 0,
@@ -44,27 +61,110 @@ export default function DashboardPage() {
 
     workersMap[worker].generated += incomePEN
 
+    const workerData = workers.find(w => w.email?.toLowerCase() === item.worker_email?.toLowerCase())
     let cost = 0
-    if (worker === 'douglas') {
-      cost = service === 'seguros' ? 5 : 6
-    } else if (worker === 'samantha') {
-      cost = 5
-    } else if (worker === 'david') {
-      cost = incomePEN
+
+    if (workerData) {
+      cost = service === 'seguros' ? workerData.pago_seguros : workerData.pago_unas
+    } else {
+      if (worker === 'douglas') {
+        cost = service === 'seguros' ? 5 : 6
+      } else if (worker === 'samantha') {
+        cost = 5
+      } else if (worker === 'david') {
+        cost = incomePEN
+      }
     }
 
     workersMap[worker].paid += cost
-    workersMap[worker].profit =
-      workersMap[worker].generated - workersMap[worker].paid
+    workersMap[worker].profit = workersMap[worker].generated - workersMap[worker].paid
   })
 
-  const workers = Object.values(workersMap)
+  const workersArray = Object.values(workersMap)
 
-  const totalGenerated = workers.reduce((a: number, w: any) => a + w.generated, 0)
-  const totalPaid = workers.reduce((a: number, w: any) => a + w.paid, 0)
-  const totalProfit = workers.reduce((a: number, w: any) => a + w.profit, 0)
+  const totalGenerated = workersArray.reduce((a: number, w: any) => a + w.generated, 0)
+  const totalPaid = workersArray.reduce((a: number, w: any) => a + w.paid, 0)
+  const totalProfit = workersArray.reduce((a: number, w: any) => a + w.profit, 0)
+
+  const unasReviews = data
+    .filter(r => r.service_type === 'unas')
+    .sort((a, b) => {
+      const aTime = new Date(a.created_at).getTime()
+      const bTime = new Date(b.created_at).getTime()
+      return aTime - bTime
+    })
+
+  const segurosReviews = data
+    .filter(r => r.service_type === 'seguros')
+    .sort((a, b) => {
+      const aTime = new Date(a.created_at).getTime()
+      const bTime = new Date(b.created_at).getTime()
+      return aTime - bTime
+    })
 
   const penToUsd = (pen: number) => (pen / USD_TO_PEN).toFixed(2)
+
+  async function handleResetWeekly() {
+    if (!confirm('⚠️ ATENCIÓN: ¿Eliminar TODAS las reviews? Esta acción no se puede deshacer.')) return
+
+    setLoading(true)
+    const { error } = await supabase.from('reviews').delete().neq('id', '')
+
+    if (!error) {
+      setMessage('✅ Reviews eliminadas correctamente')
+      setMessageType('success')
+      await fetchData()
+    } else {
+      setMessage('❌ Error al eliminar reviews')
+      setMessageType('error')
+    }
+
+    setTimeout(() => setMessage(''), 3000)
+    setLoading(false)
+  }
+
+  async function handleNewWorker() {
+    if (!newWorkerForm.name || !newWorkerForm.email || !newWorkerForm.pago_unas || !newWorkerForm.pago_seguros) {
+      setMessage('⚠️ Completa todos los campos')
+      setMessageType('warning')
+      return
+    }
+
+    setLoading(true)
+    const { error } = await supabase.from('workers').insert([{
+      name: newWorkerForm.name,
+      email: newWorkerForm.email.toLowerCase(),
+      pago_unas: parseInt(newWorkerForm.pago_unas),
+      pago_seguros: parseInt(newWorkerForm.pago_seguros)
+    }])
+
+    if (!error) {
+      setMessage('✅ Worker agregado correctamente')
+      setMessageType('success')
+      setNewWorkerForm({ name: '', email: '', pago_unas: '', pago_seguros: '' })
+      setShowNewWorkerModal(false)
+      await fetchData()
+    } else {
+      setMessage('❌ Error al agregar worker')
+      setMessageType('error')
+    }
+
+    setTimeout(() => setMessage(''), 3000)
+    setLoading(false)
+  }
+
+  async function copyToClipboard(text: string) {
+    await navigator.clipboard.writeText(text)
+    setMessage('📋 Copiado al portapapeles')
+    setMessageType('success')
+    setTimeout(() => setMessage(''), 2000)
+  }
+
+  const formatListForCopy = (reviewList: any[]) => {
+    return reviewList
+      .map((r, idx) => `${idx + 1}. ${r.client_name}`)
+      .join('\n')
+  }
 
   if (loading) {
     return (
@@ -77,6 +177,12 @@ export default function DashboardPage() {
         </div>
       </div>
     )
+  }
+
+  const messageStyles = {
+    success: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400',
+    error: 'bg-red-500/10 border-red-500/30 text-red-400',
+    warning: 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400',
   }
 
   return (
@@ -163,7 +269,7 @@ export default function DashboardPage() {
             <div className="mt-4 h-1 w-full bg-slate-800 rounded-full overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-red-700 to-red-400 rounded-full"
-                style={{ width: `${(totalPaid / totalGenerated) * 100}%` }}
+                style={{ width: `${totalGenerated > 0 ? (totalPaid / totalGenerated) * 100 : 0}%` }}
               />
             </div>
           </div>
@@ -186,7 +292,7 @@ export default function DashboardPage() {
               <div
                 className="h-full bg-gradient-to-r from-cyan-700 to-cyan-400 rounded-full"
                 style={{
-                  width: `${(totalProfit / totalGenerated) * 100}%`,
+                  width: `${totalGenerated > 0 ? (totalProfit / totalGenerated) * 100 : 0}%`,
                 }}
               />
             </div>
@@ -194,111 +300,209 @@ export default function DashboardPage() {
 
         </div>
 
-        {/* SECTION TITLE */}
+        {/* SECTION TITLE - SERVICES */}
         <div className="flex items-center gap-4 mb-6">
           <h2 className="text-slate-300 text-lg font-semibold tracking-wide uppercase">
-            Workers
+            Servicios
           </h2>
           <div className="flex-1 h-px bg-slate-800" />
-          <span className="text-slate-600 text-sm">{workers.length} activos</span>
+          <span className="text-slate-600 text-sm">{unasReviews.length + segurosReviews.length} registros</span>
         </div>
 
-        {/* WORKERS */}
-        <div className="grid gap-5 md:grid-cols-3">
-          {workers.map((worker: any) => (
-            <div
-              key={worker.name}
-              className="bg-gradient-to-br from-slate-900 to-[#0d0d14] border border-slate-800 p-7 rounded-2xl hover:border-emerald-500/30 transition-all duration-300"
-            >
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/10 border border-emerald-500/20 flex items-center justify-center text-lg font-black text-emerald-400 capitalize">
-                  {worker.name.charAt(0)}
+        {/* SERVICES GRID */}
+        <div className="grid gap-8 md:grid-cols-2 mb-12">
+
+          {/* UÑAS CARD */}
+          <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 to-[#0d0d14] border border-slate-800 p-8 rounded-2xl hover:border-emerald-500/30 transition-all duration-300">
+            <div className="absolute top-0 right-0 w-40 h-40 bg-pink-500/5 rounded-full -translate-y-10 translate-x-10" />
+
+            <div className="relative z-10 flex items-center justify-between mb-8">
+              <h3 className="text-3xl font-black tracking-tight flex items-center gap-3">
+                <span className="text-4xl">💅</span>
+                <span>Uñas</span>
+              </h3>
+              <button
+                onClick={() => copyToClipboard(formatListForCopy(unasReviews))}
+                className="px-4 py-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-400 text-sm font-semibold hover:bg-emerald-500/20 hover:border-emerald-500/50 transition-all duration-300"
+              >
+                📋 Copiar
+              </button>
+            </div>
+
+            <div className="relative z-10">
+              {unasReviews.length === 0 ? (
+                <p className="text-slate-500 text-sm">No hay registros aún</p>
+              ) : (
+                <div className="space-y-2">
+                  {unasReviews.map((review, idx) => {
+                    const workerName = review.worker_email?.split('@')[0] || 'unknown'
+                    const workerFullName = workers.find(w => w.email?.toLowerCase() === review.worker_email?.toLowerCase())?.name || workerName
+                    return (
+                      <div
+                        key={review.id}
+                        className="flex items-center justify-between bg-black border border-slate-800 rounded-xl px-5 py-3 hover:border-emerald-500/40 transition"
+                      >
+                        <div className="flex items-center gap-4">
+                          <span className="text-slate-500 font-mono text-sm w-8">{idx + 1}.</span>
+                          <span className="font-medium tracking-wide text-white">{review.client_name}</span>
+                        </div>
+                        <span className="text-slate-600 text-xs tracking-widest">
+                          ({workerFullName})
+                        </span>
+                      </div>
+                    )
+                  })}
                 </div>
+              )}
+            </div>
+          </div>
+
+          {/* SEGUROS CARD */}
+          <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 to-[#0d0d14] border border-slate-800 p-8 rounded-2xl hover:border-emerald-500/30 transition-all duration-300">
+            <div className="absolute top-0 right-0 w-40 h-40 bg-cyan-500/5 rounded-full -translate-y-10 translate-x-10" />
+
+            <div className="relative z-10 flex items-center justify-between mb-8">
+              <h3 className="text-3xl font-black tracking-tight flex items-center gap-3">
+                <span className="text-4xl">🛡️</span>
+                <span>Seguros</span>
+              </h3>
+              <button
+                onClick={() => copyToClipboard(formatListForCopy(segurosReviews))}
+                className="px-4 py-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-400 text-sm font-semibold hover:bg-emerald-500/20 hover:border-emerald-500/50 transition-all duration-300"
+              >
+                📋 Copiar
+              </button>
+            </div>
+
+            <div className="relative z-10">
+              {segurosReviews.length === 0 ? (
+                <p className="text-slate-500 text-sm">No hay registros aún</p>
+              ) : (
+                <div className="space-y-2">
+                  {segurosReviews.map((review, idx) => {
+                    const workerName = review.worker_email?.split('@')[0] || 'unknown'
+                    const workerFullName = workers.find(w => w.email?.toLowerCase() === review.worker_email?.toLowerCase())?.name || workerName
+                    return (
+                      <div
+                        key={review.id}
+                        className="flex items-center justify-between bg-black border border-slate-800 rounded-xl px-5 py-3 hover:border-emerald-500/40 transition"
+                      >
+                        <div className="flex items-center gap-4">
+                          <span className="text-slate-500 font-mono text-sm w-8">{idx + 1}.</span>
+                          <span className="font-medium tracking-wide text-white">{review.client_name}</span>
+                        </div>
+                        <span className="text-slate-600 text-xs tracking-widest">
+                          ({workerFullName})
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+        </div>
+
+        {/* BUTTONS SECTION */}
+        <div className="flex flex-col md:flex-row gap-4 mb-12">
+          <button
+            onClick={handleResetWeekly}
+            disabled={loading}
+            className="flex-1 px-6 py-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 font-bold text-base hover:bg-red-500/20 hover:border-red-500/50 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 uppercase tracking-wide"
+          >
+            🗑️ Reset Semanal
+          </button>
+
+          <button
+            onClick={() => setShowNewWorkerModal(true)}
+            disabled={loading}
+            className="flex-1 px-6 py-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 font-bold text-base hover:bg-emerald-500/20 hover:border-emerald-500/50 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 uppercase tracking-wide"
+          >
+            ➕ Añadir Worker
+          </button>
+        </div>
+
+        {/* MESSAGE */}
+        {message && (
+          <div className={`mb-8 rounded-xl border px-6 py-4 text-center text-sm ${messageStyles[messageType]}`}>
+            {message}
+          </div>
+        )}
+
+        {/* NEW WORKER MODAL */}
+        {showNewWorkerModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+            <div className="bg-gradient-to-br from-slate-900 to-[#0d0d14] border border-slate-800 rounded-2xl p-8 w-full max-w-md shadow-2xl">
+              <h3 className="text-2xl font-black mb-6 text-white flex items-center gap-2">
+                <span>➕</span>
+                <span>Nuevo Worker</span>
+              </h3>
+
+              <div className="space-y-4 mb-6">
                 <div>
-                  <h2 className="text-xl font-bold capitalize text-white tracking-tight">
-                    {worker.name}
-                  </h2>
-                  <p className="text-slate-600 text-xs">
-                    {worker.seguros + worker.unas} servicios totales
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 mb-6">
-                <div className="bg-slate-800/50 rounded-xl p-3 text-center">
-                  <p className="text-slate-500 text-xs mb-1">Seguros</p>
-                  <p className="text-white font-black text-2xl">{worker.seguros}</p>
-                </div>
-                <div className="bg-slate-800/50 rounded-xl p-3 text-center">
-                  <p className="text-slate-500 text-xs mb-1">Uñas</p>
-                  <p className="text-white font-black text-2xl">{worker.unas}</p>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex justify-between items-center py-2 px-3 rounded-lg bg-emerald-500/5 border border-emerald-500/10">
-                  <span className="text-slate-400 text-sm">Generado</span>
-                  <div className="text-right">
-                    <p className="text-emerald-400 font-bold text-sm">
-                      S/ {worker.generated.toFixed(2)}
-                    </p>
-                    <p className="text-slate-600 text-xs font-mono">
-                      ${penToUsd(worker.generated)}
-                    </p>
-                  </div>
+                  <label className="block text-slate-400 text-sm font-semibold mb-2">Nombre</label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Carlos"
+                    value={newWorkerForm.name}
+                    onChange={(e) => setNewWorkerForm({...newWorkerForm, name: e.target.value})}
+                    className="w-full bg-black border border-slate-800 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:border-emerald-500 outline-none transition"
+                  />
                 </div>
 
-                <div className="flex justify-between items-center py-2 px-3 rounded-lg bg-red-500/5 border border-red-500/10">
-                  <span className="text-slate-400 text-sm">Pagado</span>
-                  <div className="text-right">
-                    <p className="text-red-400 font-bold text-sm">
-                      S/ {worker.paid.toFixed(2)}
-                    </p>
-                    <p className="text-slate-600 text-xs font-mono">
-                      ${penToUsd(worker.paid)}
-                    </p>
-                  </div>
+                <div>
+                  <label className="block text-slate-400 text-sm font-semibold mb-2">Email</label>
+                  <input
+                    type="email"
+                    placeholder="ej: carlos@easymoney.com"
+                    value={newWorkerForm.email}
+                    onChange={(e) => setNewWorkerForm({...newWorkerForm, email: e.target.value})}
+                    className="w-full bg-black border border-slate-800 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:border-emerald-500 outline-none transition"
+                  />
                 </div>
 
-                <div className="flex justify-between items-center py-2.5 px-3 rounded-xl bg-cyan-500/5 border border-cyan-500/20">
-                  <span className="text-cyan-300 text-sm font-semibold">Ganancia</span>
-                  <div className="text-right">
-                    <p className="text-cyan-400 font-black text-base">
-                      S/ {worker.profit.toFixed(2)}
-                    </p>
-                    <p className="text-slate-500 text-xs font-mono">
-                      ${penToUsd(worker.profit)}
-                    </p>
-                  </div>
+                <div>
+                  <label className="block text-slate-400 text-sm font-semibold mb-2">Pago Uñas (soles)</label>
+                  <input
+                    type="number"
+                    placeholder="Ej: 5"
+                    value={newWorkerForm.pago_unas}
+                    onChange={(e) => setNewWorkerForm({...newWorkerForm, pago_unas: e.target.value})}
+                    className="w-full bg-black border border-slate-800 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:border-emerald-500 outline-none transition"
+                  />
                 </div>
-              </div>
 
-              <div className="mt-5">
-                <div className="flex justify-between text-xs text-slate-600 mb-1.5">
-                  <span>Margen</span>
-                  <span>
-                    {worker.generated > 0
-                      ? ((worker.profit / worker.generated) * 100).toFixed(0)
-                      : 0}
-                    %
-                  </span>
-                </div>
-                <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-cyan-600 to-emerald-400 rounded-full transition-all duration-700"
-                    style={{
-                      width: `${
-                        worker.generated > 0
-                          ? Math.max(0, (worker.profit / worker.generated) * 100)
-                          : 0
-                      }%`,
-                    }}
+                <div>
+                  <label className="block text-slate-400 text-sm font-semibold mb-2">Pago Seguros (soles)</label>
+                  <input
+                    type="number"
+                    placeholder="Ej: 5"
+                    value={newWorkerForm.pago_seguros}
+                    onChange={(e) => setNewWorkerForm({...newWorkerForm, pago_seguros: e.target.value})}
+                    className="w-full bg-black border border-slate-800 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:border-emerald-500 outline-none transition"
                   />
                 </div>
               </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowNewWorkerModal(false)}
+                  className="flex-1 px-4 py-3 border border-slate-700 rounded-xl text-slate-400 font-semibold hover:border-slate-600 hover:bg-slate-800/50 transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleNewWorker}
+                  disabled={loading}
+                  className="flex-1 px-4 py-3 bg-emerald-500 rounded-xl text-black font-bold hover:bg-emerald-400 transition disabled:opacity-50"
+                >
+                  Guardar
+                </button>
+              </div>
             </div>
-          ))}
-        </div>
+          </div>
+        )}
 
         {/* FOOTER */}
         <div className="mt-12 text-center text-slate-700 text-xs">
