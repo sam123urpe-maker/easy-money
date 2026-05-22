@@ -40,11 +40,9 @@ export default function DashboardPage() {
     const workerEmail = item.worker_email?.toLowerCase()
     if (!workerEmail) return
 
-    // Extraer nombre del email (parte antes de @) como fallback
     const workerSlug = workerEmail.split('@')[0]
     const workerData = workers.find(w => w.email?.toLowerCase() === workerEmail)
 
-    // Nombre real desde la tabla o fallback
     const workerName = workerData?.name || workerSlug
 
     if (!workersMap[workerSlug]) {
@@ -59,8 +57,7 @@ export default function DashboardPage() {
       }
     }
 
-    // Servicio: debe ser 'unas' o 'seguros' (tal cual viene de la BD)
-    const service = item.service_type // 'unas' o 'seguros'
+    const service = item.service_type  // 'unas' o 'seguros'
 
     if (service === 'seguros') workersMap[workerSlug].seguros++
     if (service === 'unas') workersMap[workerSlug].unas++
@@ -69,21 +66,18 @@ export default function DashboardPage() {
     const incomePEN = service === 'seguros' ? 10 * USD_TO_PEN : 5 * USD_TO_PEN
     workersMap[workerSlug].generated += incomePEN
 
-    // Costo (pago al trabajador) en soles según sus tarifas en la tabla workers
-    let costPEN = 0
+    // 🔧 CORRECCIÓN: leer pagos desde workerData con conversión a número y sin fallbacks manuales
+    let costPEN = 5 // valor por defecto
     if (workerData) {
-      costPEN = service === 'seguros' ? (workerData.pago_seguros || 5) : (workerData.pago_unas || 5)
+      const pagoUnas = Number(workerData.pago_unas)
+      const pagoSeguros = Number(workerData.pago_seguros)
+      // Si los valores son NaN, usar 5
+      const costUnas = isNaN(pagoUnas) ? 5 : pagoUnas
+      const costSeguros = isNaN(pagoSeguros) ? 5 : pagoSeguros
+      costPEN = service === 'seguros' ? costSeguros : costUnas
     } else {
-      // Fallback solo por si no existe el worker en la tabla (no debería ocurrir)
-      if (workerSlug === 'douglas') {
-        costPEN = service === 'seguros' ? 5 : 6
-      } else if (workerSlug === 'samantha') {
-        costPEN = 5
-      } else if (workerSlug === 'david') {
-        costPEN = incomePEN // no gana nada
-      } else {
-        costPEN = 5 // por defecto
-      }
+      // Si el worker no existe en la tabla (caso extremo), usar 5 como fallback genérico
+      costPEN = 5
     }
 
     workersMap[workerSlug].paid += costPEN
@@ -96,7 +90,6 @@ export default function DashboardPage() {
   const totalPaid = workersArray.reduce((a: number, w: any) => a + w.paid, 0)
   const totalProfit = workersArray.reduce((a: number, w: any) => a + w.profit, 0)
 
-  // Listados de reseñas (para mostrar y copiar)
   const unasReviews = data
     .filter(r => r.service_type === 'unas')
     .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
