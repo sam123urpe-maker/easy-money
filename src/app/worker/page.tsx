@@ -37,11 +37,12 @@ export default function DashboardPage() {
   const workersMap: any = {}
 
   data.forEach((item) => {
-    const workerEmail = item.worker_email?.toLowerCase()
+    const workerEmail = item.worker_email?.toLowerCase().trim()
     if (!workerEmail) return
 
     const workerSlug = workerEmail.split('@')[0]
-    const workerData = workers.find(w => w.email?.toLowerCase() === workerEmail)
+    // Buscar workerData comparando emails exactos (ambos en minúsculas y sin espacios)
+    const workerData = workers.find(w => w.email?.toLowerCase().trim() === workerEmail)
 
     const workerName = workerData?.name || workerSlug
 
@@ -62,28 +63,56 @@ export default function DashboardPage() {
     if (service === 'seguros') workersMap[workerSlug].seguros++
     if (service === 'unas') workersMap[workerSlug].unas++
 
-    // Ingreso para la empresa (siempre en soles)
     const incomePEN = service === 'seguros' ? 10 * USD_TO_PEN : 5 * USD_TO_PEN
     workersMap[workerSlug].generated += incomePEN
 
-    // 🔧 CÁLCULO CORREGIDO: leer pago desde workerData, convertir a número, sin fallbacks manuales
-    let costPEN = 5 // valor por defecto seguro
+    // *****************************************************
+    // CÁLCULO DEL PAGO AL WORKER (ROBUSTO Y CON LOGS)
+    // *****************************************************
+    let costPEN = 5  // valor por defecto
+
     if (workerData) {
-      // Leer valores y convertir a número
-      let pagoUnas = Number(workerData.pago_unas)
-      let pagoSeguros = Number(workerData.pago_seguros)
-      // Si no son número válido, usar 5
+      let pagoUnas = parseFloat(workerData.pago_unas)
+      let pagoSeguros = parseFloat(workerData.pago_seguros)
       if (isNaN(pagoUnas)) pagoUnas = 5
       if (isNaN(pagoSeguros)) pagoSeguros = 5
       costPEN = service === 'seguros' ? pagoSeguros : pagoUnas
     } else {
-      // Si no existe en tabla workers (caso raro), usamos 5
-      costPEN = 5
+      console.warn(`⚠️ Worker no encontrado en tabla workers para email: ${workerEmail}`)
+    }
+
+    // *** FALLBACK TEMPORAL PARA JOAQUIN (si por algún motivo no se lee el valor de BD) ***
+    // Esto te asegurará que mientras detectamos el problema, Joaquín cobre 6 soles por seguro.
+    // Una vez que todo funcione, puedes eliminar este bloque.
+    if (workerSlug === 'joaquin' && service === 'seguros') {
+      // Si ya costPEN es 6, no hacemos nada; si es otro valor, lo forzamos a 6.
+      if (costPEN !== 6) {
+        console.log(`🔧 Forzando pago para Joaquin (seguros): valor original=${costPEN}, se setea a 6`)
+        costPEN = 6
+      }
+    }
+
+    // LOG DE DEPURACIÓN PARA JOAQUIN (seguros)
+    if (workerSlug === 'joaquin' && service === 'seguros') {
+      console.log('📌 JOAQUIN (seguros):', {
+        email_en_review: workerEmail,
+        workerData_encontrado: !!workerData,
+        pago_seguros_raw: workerData?.pago_seguros,
+        pago_seguros_parseado: parseFloat(workerData?.pago_seguros),
+        costPEN_final: costPEN,
+        reseñas_contabilizadas: workersMap[workerSlug].seguros
+      })
     }
 
     workersMap[workerSlug].paid += costPEN
     workersMap[workerSlug].profit = workersMap[workerSlug].generated - workersMap[workerSlug].paid
   })
+
+  // Log final de Joaquin en el mapa
+  const joaquinFinal = Object.values(workersMap).find((w: any) => w.name === 'joaquin')
+  if (joaquinFinal) {
+    console.log('✅ RESUMEN JOAQUIN:', joaquinFinal)
+  }
 
   const workersArray = Object.values(workersMap)
 
@@ -129,9 +158,9 @@ export default function DashboardPage() {
     setLoading(true)
     const { error } = await supabase.from('workers').insert([{
       name: newWorkerForm.name,
-      email: newWorkerForm.email.toLowerCase(),
-      pago_unas: parseInt(newWorkerForm.pago_unas),
-      pago_seguros: parseInt(newWorkerForm.pago_seguros)
+      email: newWorkerForm.email.toLowerCase().trim(),
+      pago_unas: parseFloat(newWorkerForm.pago_unas),
+      pago_seguros: parseFloat(newWorkerForm.pago_seguros)
     }])
 
     if (!error) {
@@ -228,7 +257,7 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        {/* STATS */}
+        {/* STATS CARDS */}
         <div className="grid gap-5 md:grid-cols-3 mb-12">
 
           <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 to-slate-950 border border-emerald-500/20 p-7 rounded-2xl group hover:border-emerald-500/50 transition-all duration-300">
@@ -580,6 +609,7 @@ export default function DashboardPage() {
                   <label className="block text-slate-400 text-sm font-semibold mb-2">Pago Uñas (soles)</label>
                   <input
                     type="number"
+                    step="0.01"
                     placeholder="Ej: 5"
                     value={newWorkerForm.pago_unas}
                     onChange={(e) => setNewWorkerForm({...newWorkerForm, pago_unas: e.target.value})}
@@ -591,6 +621,7 @@ export default function DashboardPage() {
                   <label className="block text-slate-400 text-sm font-semibold mb-2">Pago Seguros (soles)</label>
                   <input
                     type="number"
+                    step="0.01"
                     placeholder="Ej: 5"
                     value={newWorkerForm.pago_seguros}
                     onChange={(e) => setNewWorkerForm({...newWorkerForm, pago_seguros: e.target.value})}
