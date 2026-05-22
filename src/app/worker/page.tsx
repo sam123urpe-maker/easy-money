@@ -31,7 +31,7 @@ export default function WorkerPage() {
       const hours = now.getHours()
       const minutes = now.getMinutes()
 
-      const isOpen = (day === 3 && hours >= 15) || (day === 4 && hours < 21)
+      const isOpen = (day === 3 && hours >= 15) || (day === 4) || (day === 5 && hours < 8)
 
       setIsSystemClosed(!isOpen)
 
