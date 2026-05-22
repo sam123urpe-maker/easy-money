@@ -25,9 +25,18 @@ export default function DashboardPage() {
     fetchData()
   }, [])
 
+  // 👇 FUNCIÓN ACTUALIZADA CON CONSOLE.LOG
   async function fetchData() {
-    const { data: reviewsData } = await supabase.from('reviews').select('*')
-    const { data: workersData } = await supabase.from('workers').select('*')
+    const { data: reviewsData, error: rErr } = await supabase.from('reviews').select('*')
+    const { data: workersData, error: wErr } = await supabase.from('workers').select('*')
+    
+    // 🔍 LOGS PARA DEBUGUEAR
+    console.log('===== DEBUG FETCH =====')
+    console.log('WORKERS DATA:', workersData)
+    console.log('WORKERS ERROR:', wErr)
+    console.log('REVIEWS DATA sample:', reviewsData?.[0])
+    console.log('REVIEWS email example:', reviewsData?.[0]?.worker_email)
+    console.log('=====================')
     
     setData(reviewsData || [])
     setWorkers(workersData || [])
@@ -57,26 +66,22 @@ export default function DashboardPage() {
       }
     }
 
-    const service = item.service_type  // 'unas' o 'seguros'
+    const service = item.service_type
 
     if (service === 'seguros') workersMap[workerSlug].seguros++
     if (service === 'unas') workersMap[workerSlug].unas++
 
-    // Ingreso para la empresa (siempre en soles)
     const incomePEN = service === 'seguros' ? 10 * USD_TO_PEN : 5 * USD_TO_PEN
     workersMap[workerSlug].generated += incomePEN
 
-    // 🔧 CORRECCIÓN: leer pagos desde workerData con conversión a número y sin fallbacks manuales
-    let costPEN = 5 // valor por defecto
+    let costPEN = 5
     if (workerData) {
       const pagoUnas = Number(workerData.pago_unas)
       const pagoSeguros = Number(workerData.pago_seguros)
-      // Si los valores son NaN, usar 5
       const costUnas = isNaN(pagoUnas) ? 5 : pagoUnas
       const costSeguros = isNaN(pagoSeguros) ? 5 : pagoSeguros
       costPEN = service === 'seguros' ? costSeguros : costUnas
     } else {
-      // Si el worker no existe en la tabla (caso extremo), usar 5 como fallback genérico
       costPEN = 5
     }
 
