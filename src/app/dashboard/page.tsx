@@ -37,16 +37,20 @@ export default function DashboardPage() {
   const workersMap: any = {}
 
   data.forEach((item) => {
-    const worker = item.worker_email?.split('@')[0] || 'unknown'
-    const service = item.service_type || 'uñas'
+    const workerEmail = item.worker_email?.toLowerCase()
+    if (!workerEmail) return
 
-    if (!workersMap[worker]) {
-      const workerData = workers.find(w => w.email?.toLowerCase() === item.worker_email?.toLowerCase())
-      const name = workerData?.name || worker
+    // Extraer nombre del email (parte antes de @) como fallback
+    const workerSlug = workerEmail.split('@')[0]
+    const workerData = workers.find(w => w.email?.toLowerCase() === workerEmail)
 
-      workersMap[worker] = {
-        name: name,
-        email: item.worker_email,
+    // Nombre real desde la tabla o fallback
+    const workerName = workerData?.name || workerSlug
+
+    if (!workersMap[workerSlug]) {
+      workersMap[workerSlug] = {
+        name: workerName,
+        email: workerEmail,
         seguros: 0,
         unas: 0,
         generated: 0,
@@ -55,31 +59,35 @@ export default function DashboardPage() {
       }
     }
 
-    if (service === 'seguros') workersMap[worker].seguros++
-    if (service === 'uñas') workersMap[worker].unas++
+    // Servicio: debe ser 'unas' o 'seguros' (tal cual viene de la BD)
+    const service = item.service_type // 'unas' o 'seguros'
 
-    const incomeUSD = service === 'seguros' ? 10 : 5
-    const incomePEN = incomeUSD * USD_TO_PEN
+    if (service === 'seguros') workersMap[workerSlug].seguros++
+    if (service === 'unas') workersMap[workerSlug].unas++
 
-    workersMap[worker].generated += incomePEN
+    // Ingreso para la empresa (siempre en soles)
+    const incomePEN = service === 'seguros' ? 10 * USD_TO_PEN : 5 * USD_TO_PEN
+    workersMap[workerSlug].generated += incomePEN
 
-    const workerData = workers.find(w => w.email?.toLowerCase() === item.worker_email?.toLowerCase())
-    let cost = 0
-
+    // Costo (pago al trabajador) en soles según sus tarifas en la tabla workers
+    let costPEN = 0
     if (workerData) {
-      cost = service === 'seguros' ? workerData.pago_seguros : workerData.pago_unas
+      costPEN = service === 'seguros' ? (workerData.pago_seguros || 5) : (workerData.pago_unas || 5)
     } else {
-      if (worker === 'douglas') {
-        cost = service === 'seguros' ? 5 : 6
-      } else if (worker === 'samantha') {
-        cost = 5
-      } else if (worker === 'david') {
-        cost = incomePEN
+      // Fallback solo por si no existe el worker en la tabla (no debería ocurrir)
+      if (workerSlug === 'douglas') {
+        costPEN = service === 'seguros' ? 5 : 6
+      } else if (workerSlug === 'samantha') {
+        costPEN = 5
+      } else if (workerSlug === 'david') {
+        costPEN = incomePEN // no gana nada
+      } else {
+        costPEN = 5 // por defecto
       }
     }
 
-    workersMap[worker].paid += cost
-    workersMap[worker].profit = workersMap[worker].generated - workersMap[worker].paid
+    workersMap[workerSlug].paid += costPEN
+    workersMap[workerSlug].profit = workersMap[workerSlug].generated - workersMap[workerSlug].paid
   })
 
   const workersArray = Object.values(workersMap)
@@ -88,21 +96,14 @@ export default function DashboardPage() {
   const totalPaid = workersArray.reduce((a: number, w: any) => a + w.paid, 0)
   const totalProfit = workersArray.reduce((a: number, w: any) => a + w.profit, 0)
 
+  // Listados de reseñas (para mostrar y copiar)
   const unasReviews = data
     .filter(r => r.service_type === 'unas')
-    .sort((a, b) => {
-      const aTime = new Date(a.created_at).getTime()
-      const bTime = new Date(b.created_at).getTime()
-      return aTime - bTime
-    })
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
 
   const segurosReviews = data
     .filter(r => r.service_type === 'seguros')
-    .sort((a, b) => {
-      const aTime = new Date(a.created_at).getTime()
-      const bTime = new Date(b.created_at).getTime()
-      return aTime - bTime
-    })
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
 
   const penToUsd = (pen: number) => (pen / USD_TO_PEN).toFixed(2)
 
@@ -342,8 +343,9 @@ export default function DashboardPage() {
               ) : (
                 <div className="space-y-2">
                   {unasReviews.map((review, idx) => {
-                    const workerName = review.worker_email?.split('@')[0] || 'unknown'
-                    const workerFullName = workers.find(w => w.email?.toLowerCase() === review.worker_email?.toLowerCase())?.name || workerName
+                    const workerEmail = review.worker_email?.toLowerCase()
+                    const workerData = workers.find(w => w.email?.toLowerCase() === workerEmail)
+                    const workerName = workerData?.name || workerEmail?.split('@')[0] || 'unknown'
                     return (
                       <div
                         key={review.id}
@@ -354,7 +356,7 @@ export default function DashboardPage() {
                           <span className="font-medium tracking-wide text-white">{review.client_name}</span>
                         </div>
                         <span className="text-slate-600 text-xs tracking-widest">
-                          ({workerFullName})
+                          ({workerName})
                         </span>
                       </div>
                     )
@@ -391,8 +393,9 @@ export default function DashboardPage() {
               ) : (
                 <div className="space-y-2">
                   {segurosReviews.map((review, idx) => {
-                    const workerName = review.worker_email?.split('@')[0] || 'unknown'
-                    const workerFullName = workers.find(w => w.email?.toLowerCase() === review.worker_email?.toLowerCase())?.name || workerName
+                    const workerEmail = review.worker_email?.toLowerCase()
+                    const workerData = workers.find(w => w.email?.toLowerCase() === workerEmail)
+                    const workerName = workerData?.name || workerEmail?.split('@')[0] || 'unknown'
                     return (
                       <div
                         key={review.id}
@@ -403,7 +406,7 @@ export default function DashboardPage() {
                           <span className="font-medium tracking-wide text-white">{review.client_name}</span>
                         </div>
                         <span className="text-slate-600 text-xs tracking-widest">
-                          ({workerFullName})
+                          ({workerName})
                         </span>
                       </div>
                     )
@@ -625,6 +628,33 @@ export default function DashboardPage() {
         <div className="mt-12 text-center text-slate-700 text-xs">
           1 USD = S/ {USD_TO_PEN} PEN · Datos en tiempo real
         </div>
+
+        {/* RESET MODAL */}
+        {showResetModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+            <div className="bg-gradient-to-br from-slate-900 to-[#0d0d14] border border-slate-800 rounded-2xl p-8 w-full max-w-md shadow-2xl">
+              <h3 className="text-2xl font-black mb-4 text-white">⚠️ Reset Semanal</h3>
+              <p className="text-slate-300 mb-6">
+                ¿Estás seguro de que quieres eliminar todas las reseñas? Esta acción no se puede deshacer.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowResetModal(false)}
+                  className="flex-1 px-4 py-3 border border-slate-700 rounded-xl text-slate-400 font-semibold hover:border-slate-600 hover:bg-slate-800/50 transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleConfirmReset}
+                  disabled={loading}
+                  className="flex-1 px-4 py-3 bg-red-500 rounded-xl text-white font-bold hover:bg-red-400 transition disabled:opacity-50"
+                >
+                  Eliminar todo
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
       </main>
     </>
