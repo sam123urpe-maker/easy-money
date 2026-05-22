@@ -3,188 +3,179 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
-export default function WorkerPage() {
-  const [user, setUser] = useState<any>(null)
+export default function DashboardPage() {
+  const [data, setData] = useState<any[]>([])
   const [workers, setWorkers] = useState<any[]>([])
-  const [unasText, setUnasText] = useState('')
-  const [segurosText, setSegurosText] = useState('')
-  const [unasReviews, setUnasReviews] = useState<any[]>([])
-  const [segurosReviews, setSegurosReviews] = useState<any[]>([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
   const [messageType, setMessageType] = useState<'success' | 'error' | 'warning'>('success')
-  const [isSystemClosed, setIsSystemClosed] = useState(false)
-  const [timeUntilOpen, setTimeUntilOpen] = useState<{hours: number; minutes: number; seconds: number} | null>(null)
+  const [showNewWorkerModal, setShowNewWorkerModal] = useState(false)
+  const [showResetModal, setShowResetModal] = useState(false)
+  const [copiedButton, setCopiedButton] = useState<string | null>(null)
+  const [newWorkerForm, setNewWorkerForm] = useState({
+    name: '',
+    email: '',
+    pago_unas: '',
+    pago_seguros: ''
+  })
 
-  const isDouglas = user?.email?.toLowerCase() === 'douglas@easymoney.com'
-  const isJoaquin = user?.email?.toLowerCase() === 'joaquin@easymoney.com'
-  const isCane = user?.email?.toLowerCase() === 'cane@easymoney.com'   // NUEVO
   const USD_TO_PEN = 3.4
 
   useEffect(() => {
-    init()
+    fetchData()
   }, [])
 
-  useEffect(() => {
-    const checkSystemStatus = () => {
-      const now = new Date()
-      const day = now.getDay()
-      const hours = now.getHours()
-      const minutes = now.getMinutes()
+  async function fetchData() {
+    const { data: reviewsData } = await supabase.from('reviews').select('*')
+    const { data: workersData } = await supabase.from('workers').select('*')
+    
+    setData(reviewsData || [])
+    setWorkers(workersData || [])
+    setLoading(false)
+  }
 
-      const isOpen = (day === 3 && hours >= 15) || (day === 4) || (day === 5 && hours < 8)
+  const workersMap: any = {}
 
-      setIsSystemClosed(!isOpen)
+  data.forEach((item) => {
+    const workerEmail = item.worker_email?.toLowerCase()
+    if (!workerEmail) return
 
-      if (!isOpen) {
-        let targetDate = new Date()
+    const workerSlug = workerEmail.split('@')[0]
+    const workerData = workers.find(w => w.email?.toLowerCase() === workerEmail)
 
-        if (day < 3 || (day === 3 && hours < 15)) {
-          targetDate.setDate(targetDate.getDate() + (3 - day))
-          targetDate.setHours(15, 0, 0, 0)
-        } else if (day === 3 && hours >= 15) {
-          targetDate.setDate(targetDate.getDate() + 7)
-          targetDate.setHours(15, 0, 0, 0)
-        } else if (day === 4 && hours >= 21) {
-          targetDate.setDate(targetDate.getDate() + 6)
-          targetDate.setHours(15, 0, 0, 0)
-        } else {
-          targetDate.setDate(targetDate.getDate() + ((3 - day + 7) % 7))
-          targetDate.setHours(15, 0, 0, 0)
-        }
+    const workerName = workerData?.name || workerSlug
 
-        const diff = targetDate.getTime() - now.getTime()
-        const h = Math.floor(diff / (1000 * 60 * 60))
-        const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
-        const s = Math.floor((diff % (1000 * 60)) / 1000)
-
-        setTimeUntilOpen({ hours: h, minutes: m, seconds: s })
+    if (!workersMap[workerSlug]) {
+      workersMap[workerSlug] = {
+        name: workerName,
+        email: workerEmail,
+        seguros: 0,
+        unas: 0,
+        generated: 0,
+        paid: 0,
+        profit: 0,
       }
     }
 
-    checkSystemStatus()
-    const interval = setInterval(checkSystemStatus, 1000)
+    const service = item.service_type  // 'unas' o 'seguros'
 
-    return () => clearInterval(interval)
-  }, [])
+    if (service === 'seguros') workersMap[workerSlug].seguros++
+    if (service === 'unas') workersMap[workerSlug].unas++
 
-  async function init() {
-    const { data: { user } } = await supabase.auth.getUser()
+    // Ingreso para la empresa (siempre en soles)
+    const incomePEN = service === 'seguros' ? 10 * USD_TO_PEN : 5 * USD_TO_PEN
+    workersMap[workerSlug].generated += incomePEN
 
-    if (!user) return
-
-    setUser(user)
-
-    if (!user.email) return
-
-    const { data: workersData } = await supabase.from('workers').select('*')
-    setWorkers(workersData || [])
-
-    await loadReviews(user.email)
-  }
-
-  async function loadReviews(email: string) {
-    const { data } = await supabase
-      .from('reviews')
-      .select('*')
-      .eq('worker_email', email.toLowerCase())
-      .order('created_at', { ascending: true })
-
-    if (data) {
-      const unas = data
-        .filter(r => r.service_type === 'unas')
-        .sort((a, b) => {
-          const aTime = new Date(a.created_at).getTime()
-          const bTime = new Date(b.created_at).getTime()
-          return aTime - bTime
-        })
-      const seguros = data
-        .filter(r => r.service_type === 'seguros')
-        .sort((a, b) => {
-          const aTime = new Date(a.created_at).getTime()
-          const bTime = new Date(b.created_at).getTime()
-          return aTime - bTime
-        })
-      setUnasReviews(unas)
-      setSegurosReviews(seguros)
+    // 🔧 CÁLCULO CORREGIDO: leer pago desde workerData, convertir a número, sin fallbacks manuales
+    let costPEN = 5 // valor por defecto seguro
+    if (workerData) {
+      // Leer valores y convertir a número
+      let pagoUnas = Number(workerData.pago_unas)
+      let pagoSeguros = Number(workerData.pago_seguros)
+      // Si no son número válido, usar 5
+      if (isNaN(pagoUnas)) pagoUnas = 5
+      if (isNaN(pagoSeguros)) pagoSeguros = 5
+      costPEN = service === 'seguros' ? pagoSeguros : pagoUnas
+    } else {
+      // Si no existe en tabla workers (caso raro), usamos 5
+      costPEN = 5
     }
+
+    workersMap[workerSlug].paid += costPEN
+    workersMap[workerSlug].profit = workersMap[workerSlug].generated - workersMap[workerSlug].paid
+  })
+
+  const workersArray = Object.values(workersMap)
+
+  const totalGenerated = workersArray.reduce((a: number, w: any) => a + w.generated, 0)
+  const totalPaid = workersArray.reduce((a: number, w: any) => a + w.paid, 0)
+  const totalProfit = workersArray.reduce((a: number, w: any) => a + w.profit, 0)
+
+  const unasReviews = data
+    .filter(r => r.service_type === 'unas')
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+
+  const segurosReviews = data
+    .filter(r => r.service_type === 'seguros')
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+
+  const penToUsd = (pen: number) => (pen / USD_TO_PEN).toFixed(2)
+
+  async function handleConfirmReset() {
+    setLoading(true)
+    const { error } = await supabase.from('reviews').delete().neq('id', '')
+
+    if (!error) {
+      setMessage('✅ Reviews eliminadas correctamente')
+      setMessageType('success')
+      setShowResetModal(false)
+      await fetchData()
+    } else {
+      setMessage('❌ Error al eliminar reviews')
+      setMessageType('error')
+    }
+
+    setTimeout(() => setMessage(''), 3000)
+    setLoading(false)
   }
 
-  async function handleAdd() {
-    if (!user || !user.email) return
-
-    if (isSystemClosed) {
-      setMessage('🔒 El sistema está cerrado. No puedes añadir clientes en este horario.')
+  async function handleNewWorker() {
+    if (!newWorkerForm.name || !newWorkerForm.email || !newWorkerForm.pago_unas || !newWorkerForm.pago_seguros) {
+      setMessage('⚠️ Completa todos los campos')
       setMessageType('warning')
       return
     }
 
     setLoading(true)
-    setMessage('')
+    const { error } = await supabase.from('workers').insert([{
+      name: newWorkerForm.name,
+      email: newWorkerForm.email.toLowerCase(),
+      pago_unas: parseInt(newWorkerForm.pago_unas),
+      pago_seguros: parseInt(newWorkerForm.pago_seguros)
+    }])
 
-    const unas = unasText
-      .split('\n')
-      .map(n => n.trim())
-      .filter(n => n !== '')
-
-    const seguros = segurosText
-      .split('\n')
-      .map(n => n.trim())
-      .filter(n => n !== '')
-
-    const inserts = [
-      ...unas.map(name => ({
-        client_name: name,
-        worker_email: user.email.toLowerCase(),
-        service_type: 'unas',
-        review_text: '',
-        rating: 5
-      })),
-      ...seguros.map(name => ({
-        client_name: name,
-        worker_email: user.email.toLowerCase(),
-        service_type: 'seguros',
-        review_text: '',
-        rating: 5
-      }))
-    ]
-
-    if (inserts.length === 0) {
-      setLoading(false)
-      setMessage('⚠️ No hay datos para añadir')
-      setMessageType('warning')
-      return
-    }
-
-    const { error } = await supabase
-      .from('reviews')
-      .insert(inserts)
-
-    if (error) {
-      setMessage('❌ Error al guardar')
+    if (!error) {
+      setMessage('✅ Worker agregado correctamente')
+      setMessageType('success')
+      setNewWorkerForm({ name: '', email: '', pago_unas: '', pago_seguros: '' })
+      setShowNewWorkerModal(false)
+      await fetchData()
+    } else {
+      setMessage('❌ Error al agregar worker')
       setMessageType('error')
-      setLoading(false)
-      return
     }
-
-    setUnasText('')
-    setSegurosText('')
-    setMessage('✅ Datos guardados correctamente')
-    setMessageType('success')
-
-    await loadReviews(user.email)
-    setLoading(false)
 
     setTimeout(() => setMessage(''), 3000)
+    setLoading(false)
   }
 
-  const unasCount = unasText.split('\n').filter(n => n.trim() !== '').length
-  const segurosCount = segurosText.split('\n').filter(n => n.trim() !== '').length
+  async function copyToClipboard(text: string, buttonId: string) {
+    await navigator.clipboard.writeText(text)
+    setCopiedButton(buttonId)
+    setMessage('📋 Copiado al portapapeles')
+    setMessageType('success')
+    setTimeout(() => setMessage(''), 2000)
+    setTimeout(() => setCopiedButton(null), 1500)
+  }
 
-  const currentWorker = workers.find(w => w.email?.toLowerCase() === user?.email?.toLowerCase())
+  const formatListForCopy = (reviewList: any[]) => {
+    return reviewList
+      .map((r, idx) => `${idx + 1}. ${r.client_name}`)
+      .join('\n')
+  }
 
-  const totalUnasEarned = unasReviews.length * (currentWorker?.pago_unas || 5)
-  const totalSegurosEarned = segurosReviews.length * (currentWorker?.pago_seguros || 5)
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0f] text-white flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-emerald-500/30 border-t-emerald-400 rounded-full animate-spin" />
+          <p className="text-slate-400 text-lg font-medium tracking-wide">
+            Cargando dashboard...
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   const messageStyles = {
     success: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400',
@@ -193,214 +184,227 @@ export default function WorkerPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#0a0a0f] text-white px-6 py-16 flex justify-center relative overflow-hidden">
+    <>
+      {/* 🤑 FLOATING EMOJI */}
+      <div
+        className="fixed top-6 right-8 z-50 select-none pointer-events-none"
+        style={{
+          fontSize: '3.5rem',
+          animation: 'floatEmoji 3s ease-in-out infinite',
+          filter: 'drop-shadow(0 0 16px rgba(52,211,153,0.5))',
+        }}
+      >
+        🤑
+      </div>
 
-      {/* KEYFRAMES PARA EL EFECTO FLOTANTE */}
+      {/* FLOAT KEYFRAMES */}
       <style>{`
         @keyframes floatEmoji {
           0%   { transform: translateY(0px) rotate(-5deg); }
-          50%  { transform: translateY(-18px) rotate(5deg); }
+          50%  { transform: translateY(-14px) rotate(5deg); }
           100% { transform: translateY(0px) rotate(-5deg); }
         }
       `}</style>
 
-      <div className="w-full max-w-7xl">
+      <main className="min-h-screen bg-[#0a0a0f] text-white p-6 md:p-10">
 
-        {/* HEADER - TÍTULO CENTRADO */}
-        <div className="text-center mb-12">
-          <h1 className="text-6xl md:text-7xl font-black tracking-tight">
-            <span className="bg-gradient-to-r from-white via-emerald-300 to-emerald-500 bg-clip-text text-transparent drop-shadow-[0_0_30px_rgba(16,185,129,0.5)]">
+        {/* HEADER */}
+        <div className="mb-12">
+          <div className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-4 py-1.5 mb-4">
+            <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+            <span className="text-emerald-400 text-sm font-medium tracking-widest uppercase">
+              Live Dashboard
+            </span>
+          </div>
+
+          <h1 className="text-5xl md:text-6xl font-black tracking-tight">
+            <span className="bg-gradient-to-br from-white via-emerald-200 to-emerald-500 bg-clip-text text-transparent">
               Easy Money
             </span>
           </h1>
-          {user && (
-            <p className="mt-4 text-slate-500 text-sm tracking-widest uppercase">
-              {user.email}
+
+          <p className="text-slate-500 mt-3 text-base">
+            Panel financiero en tiempo real — Supabase
+          </p>
+        </div>
+
+        {/* STATS */}
+        <div className="grid gap-5 md:grid-cols-3 mb-12">
+
+          <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 to-slate-950 border border-emerald-500/20 p-7 rounded-2xl group hover:border-emerald-500/50 transition-all duration-300">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full -translate-y-10 translate-x-10 group-hover:bg-emerald-500/10 transition-all duration-500" />
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-center text-xl">
+                💰
+              </div>
+              <p className="text-slate-400 font-medium">Total Generado</p>
+            </div>
+            <h2 className="text-4xl text-emerald-400 font-black tracking-tight">
+              S/ {totalGenerated.toFixed(2)}
+            </h2>
+            <p className="text-slate-500 text-sm mt-1 font-mono">
+              ≈ ${penToUsd(totalGenerated)} USD
             </p>
-          )}
-        </div>
-
-        {/* ZONA DE LA IMAGEN (STICKY) - justo después del título, antes de los cuadros */}
-        <div className="sticky top-0 z-20 flex justify-center mb-12">
-          {isDouglas && (
-            <div
-              className="relative"
-              style={{
-                animation: 'floatEmoji 3.5s ease-in-out infinite',
-              }}
-            >
-              <div className="absolute inset-0 bg-emerald-500/20 blur-3xl rounded-full w-[550px] h-[550px]" />
-              <img
-                src="https://i.postimg.cc/cCFwBFKQ/4d8180fd-fd29-4e5b-babe-28459bf9cb68.png"
-                alt="Douglas"
-                className="relative w-[520px] object-contain drop-shadow-[0_0_80px_rgba(16,185,129,0.4)]"
-              />
-            </div>
-          )}
-          {isJoaquin && (
-            <div
-              className="relative"
-              style={{
-                animation: 'floatEmoji 3.5s ease-in-out infinite',
-              }}
-            >
-              <div className="absolute inset-0 bg-emerald-500/20 blur-3xl rounded-full w-[550px] h-[550px]" />
-              <img
-                src="https://i.postimg.cc/6ph8D0Kg/4e1775c7-7f98-4d9e-8cd6-11c1110d4eaa.png"
-                alt="Joaquin"
-                className="relative w-[520px] object-contain drop-shadow-[0_0_80px_rgba(16,185,129,0.4)]"
-              />
-            </div>
-          )}
-          {/* NUEVO: CANE */}
-          {isCane && (
-            <div
-              className="relative"
-              style={{
-                animation: 'floatEmoji 3.5s ease-in-out infinite',
-              }}
-            >
-              <div className="absolute inset-0 bg-emerald-500/20 blur-3xl rounded-full w-[550px] h-[550px]" />
-              <img
-                src="https://i.postimg.cc/gjDqBxyd/386c7408-cf88-4514-8b96-e1df43925531.png"
-                alt="Cane"
-                className="relative w-[520px] object-contain drop-shadow-[0_0_80px_rgba(16,185,129,0.4)]"
-              />
-            </div>
-          )}
-        </div>
-
-        {/* CLOSED SYSTEM MESSAGE */}
-        {isSystemClosed && (
-          <div className="mb-12 relative overflow-hidden bg-gradient-to-br from-red-950 to-slate-950 border border-red-500/30 p-8 rounded-2xl">
-            <div className="absolute top-0 right-0 w-40 h-40 bg-red-500/10 rounded-full -translate-y-10 translate-x-10" />
-            <div className="relative z-10 text-center">
-              <p className="text-2xl font-black mb-4">🔒 El sistema está cerrado</p>
-              <p className="text-slate-300 mb-8 text-base">
-                Puedes añadir clientes SOLO los <span className="font-bold text-emerald-400">miércoles de 3:00 PM a viernes 8:00 AM</span>
-              </p>
-              {timeUntilOpen && (
-                <div className="flex justify-center gap-4 md:gap-6">
-                  <div className="bg-black border border-red-500/20 rounded-2xl px-6 py-5 min-w-24">
-                    <p className="text-4xl font-black text-red-400">{String(timeUntilOpen.hours).padStart(2, '0')}</p>
-                    <p className="text-xs text-slate-500 mt-2 font-semibold uppercase">Horas</p>
-                  </div>
-                  <div className="bg-black border border-red-500/20 rounded-2xl px-6 py-5 min-w-24">
-                    <p className="text-4xl font-black text-red-400">{String(timeUntilOpen.minutes).padStart(2, '0')}</p>
-                    <p className="text-xs text-slate-500 mt-2 font-semibold uppercase">Minutos</p>
-                  </div>
-                  <div className="bg-black border border-red-500/20 rounded-2xl px-6 py-5 min-w-24">
-                    <p className="text-4xl font-black text-red-400">{String(timeUntilOpen.seconds).padStart(2, '0')}</p>
-                    <p className="text-xs text-slate-500 mt-2 font-semibold uppercase">Segundos</p>
-                  </div>
-                </div>
-              )}
+            <div className="mt-4 h-1 w-full bg-slate-800 rounded-full overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-full w-full" />
             </div>
           </div>
-        )}
 
-        {/* INPUTS GRID */}
-        <div className="grid md:grid-cols-2 gap-10 mb-12">
+          <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 to-slate-950 border border-red-500/20 p-7 rounded-2xl group hover:border-red-500/50 transition-all duration-300">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/5 rounded-full -translate-y-10 translate-x-10 group-hover:bg-red-500/10 transition-all duration-500" />
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center justify-center text-xl">
+                💸
+              </div>
+              <p className="text-slate-400 font-medium">Total Pagado</p>
+            </div>
+            <h2 className="text-4xl text-red-400 font-black tracking-tight">
+              S/ {totalPaid.toFixed(2)}
+            </h2>
+            <p className="text-slate-500 text-sm mt-1 font-mono">
+              ≈ ${penToUsd(totalPaid)} USD
+            </p>
+            <div className="mt-4 h-1 w-full bg-slate-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-red-700 to-red-400 rounded-full"
+                style={{ width: `${totalGenerated > 0 ? (totalPaid / totalGenerated) * 100 : 0}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 to-slate-950 border border-cyan-500/20 p-7 rounded-2xl group hover:border-cyan-500/50 transition-all duration-300">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 rounded-full -translate-y-10 translate-x-10 group-hover:bg-cyan-500/10 transition-all duration-500" />
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-cyan-500/10 border border-cyan-500/20 rounded-xl flex items-center justify-center text-xl">
+                📈
+              </div>
+              <p className="text-slate-400 font-medium">Ganancia Neta</p>
+            </div>
+            <h2 className="text-4xl text-cyan-400 font-black tracking-tight">
+              S/ {totalProfit.toFixed(2)}
+            </h2>
+            <p className="text-slate-500 text-sm mt-1 font-mono">
+              ≈ ${penToUsd(totalProfit)} USD
+            </p>
+            <div className="mt-4 h-1 w-full bg-slate-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-cyan-700 to-cyan-400 rounded-full"
+                style={{
+                  width: `${totalGenerated > 0 ? (totalProfit / totalGenerated) * 100 : 0}%`,
+                }}
+              />
+            </div>
+          </div>
+
+        </div>
+
+        {/* SECTION TITLE - SERVICES */}
+        <div className="flex items-center gap-4 mb-6">
+          <h2 className="text-slate-300 text-lg font-semibold tracking-wide uppercase">
+            Servicios
+          </h2>
+          <div className="flex-1 h-px bg-slate-800" />
+          <span className="text-slate-600 text-sm">{unasReviews.length + segurosReviews.length} registros</span>
+        </div>
+
+        {/* SERVICES GRID */}
+        <div className="grid gap-8 md:grid-cols-2 mb-12">
 
           {/* UÑAS CARD */}
-          <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 to-[#0d0d14] p-8 hover:border-emerald-500/30 transition-all duration-300 shadow-[0_0_40px_rgba(0,0,0,0.6)]">
+          <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 to-[#0d0d14] border border-slate-800 p-8 rounded-2xl hover:border-emerald-500/30 transition-all duration-300">
             <div className="absolute top-0 right-0 w-40 h-40 bg-pink-500/5 rounded-full -translate-y-10 translate-x-10" />
 
-            <div className="relative z-10 mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-3xl font-black tracking-tight flex items-center gap-2">
-                  <span className="text-4xl">💅</span>
-                  <span>Uñas</span>
-                </h2>
-                <span className="text-sm bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-3 py-1.5 text-emerald-400 font-semibold">
-                  {unasCount} detectados
-                </span>
-              </div>
-
-              <textarea
-                disabled={isSystemClosed}
-                className="w-full h-48 rounded-xl border border-slate-800 bg-black px-5 py-4 text-white outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 resize-none transition disabled:opacity-50 disabled:cursor-not-allowed font-mono"
-                placeholder="Un nombre por línea"
-                value={unasText}
-                onChange={(e) => setUnasText(e.target.value)}
-              />
-
-              <div className="mt-4 p-5 bg-emerald-500/5 border border-emerald-500/10 rounded-xl">
-                <p className="text-slate-400 text-sm mb-2 font-semibold">Total ganado en Uñas</p>
-                <p className="text-3xl font-black text-emerald-400">S/ {totalUnasEarned.toFixed(2)}</p>
-              </div>
+            <div className="relative z-10 flex items-center justify-between mb-8">
+              <h3 className="text-3xl font-black tracking-tight flex items-center gap-3">
+                <span className="text-4xl">💅</span>
+                <span>Uñas</span>
+              </h3>
+              <button
+                onClick={() => copyToClipboard(formatListForCopy(unasReviews), 'unas')}
+                className={`px-4 py-2 border rounded-lg text-sm font-semibold transition-all duration-300 ${
+                  copiedButton === 'unas'
+                    ? 'bg-emerald-500/30 border-emerald-500/50 text-emerald-300 scale-105'
+                    : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/50'
+                }`}
+              >
+                {copiedButton === 'unas' ? '✅ ¡Copiado!' : '📋 Copiar'}
+              </button>
             </div>
 
-            {/* UÑAS LIST */}
-            <div className="relative z-10 mt-6 pt-6 border-t border-slate-800">
-              <p className="text-slate-400 text-sm mb-4 font-semibold uppercase tracking-wide">
-                Registrados ({unasReviews.length})
-              </p>
+            <div className="relative z-10">
               {unasReviews.length === 0 ? (
-                <p className="text-slate-600 text-sm italic">Aún no hay registros de uñas</p>
+                <p className="text-slate-500 text-sm">No hay registros aún</p>
               ) : (
-                <div className="space-y-2 max-h-72 overflow-y-auto">
-                  {unasReviews.map((r, idx) => (
-                    <div
-                      key={r.id}
-                      className="flex items-center gap-3 bg-black border border-slate-800 rounded-lg px-4 py-3 hover:border-emerald-500/40 transition"
-                    >
-                      <span className="text-slate-500 font-mono text-sm w-6 font-bold">{idx + 1}.</span>
-                      <span className="font-medium text-white tracking-wide">{r.client_name}</span>
-                    </div>
-                  ))}
+                <div className="space-y-2">
+                  {unasReviews.map((review, idx) => {
+                    const workerEmail = review.worker_email?.toLowerCase()
+                    const workerData = workers.find(w => w.email?.toLowerCase() === workerEmail)
+                    const workerName = workerData?.name || workerEmail?.split('@')[0] || 'unknown'
+                    return (
+                      <div
+                        key={review.id}
+                        className="flex items-center justify-between bg-black border border-slate-800 rounded-xl px-5 py-3 hover:border-emerald-500/40 transition"
+                      >
+                        <div className="flex items-center gap-4">
+                          <span className="text-slate-500 font-mono text-sm w-8">{idx + 1}.</span>
+                          <span className="font-medium tracking-wide text-white">{review.client_name}</span>
+                        </div>
+                        <span className="text-slate-600 text-xs tracking-widest">
+                          ({workerName})
+                        </span>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>
           </div>
 
           {/* SEGUROS CARD */}
-          <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 to-[#0d0d14] p-8 hover:border-emerald-500/30 transition-all duration-300 shadow-[0_0_40px_rgba(0,0,0,0.6)]">
+          <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 to-[#0d0d14] border border-slate-800 p-8 rounded-2xl hover:border-emerald-500/30 transition-all duration-300">
             <div className="absolute top-0 right-0 w-40 h-40 bg-cyan-500/5 rounded-full -translate-y-10 translate-x-10" />
 
-            <div className="relative z-10 mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-3xl font-black tracking-tight flex items-center gap-2">
-                  <span className="text-4xl">🛡️</span>
-                  <span>Seguros</span>
-                </h2>
-                <span className="text-sm bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-3 py-1.5 text-emerald-400 font-semibold">
-                  {segurosCount} detectados
-                </span>
-              </div>
-
-              <textarea
-                disabled={isSystemClosed}
-                className="w-full h-48 rounded-xl border border-slate-800 bg-black px-5 py-4 text-white outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 resize-none transition disabled:opacity-50 disabled:cursor-not-allowed font-mono"
-                placeholder="Un nombre por línea"
-                value={segurosText}
-                onChange={(e) => setSegurosText(e.target.value)}
-              />
-
-              <div className="mt-4 p-5 bg-emerald-500/5 border border-emerald-500/10 rounded-xl">
-                <p className="text-slate-400 text-sm mb-2 font-semibold">Total ganado en Seguros</p>
-                <p className="text-3xl font-black text-emerald-400">S/ {totalSegurosEarned.toFixed(2)}</p>
-              </div>
+            <div className="relative z-10 flex items-center justify-between mb-8">
+              <h3 className="text-3xl font-black tracking-tight flex items-center gap-3">
+                <span className="text-4xl">🛡️</span>
+                <span>Seguros</span>
+              </h3>
+              <button
+                onClick={() => copyToClipboard(formatListForCopy(segurosReviews), 'seguros')}
+                className={`px-4 py-2 border rounded-lg text-sm font-semibold transition-all duration-300 ${
+                  copiedButton === 'seguros'
+                    ? 'bg-emerald-500/30 border-emerald-500/50 text-emerald-300 scale-105'
+                    : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/50'
+                }`}
+              >
+                {copiedButton === 'seguros' ? '✅ ¡Copiado!' : '📋 Copiar'}
+              </button>
             </div>
 
-            {/* SEGUROS LIST */}
-            <div className="relative z-10 mt-6 pt-6 border-t border-slate-800">
-              <p className="text-slate-400 text-sm mb-4 font-semibold uppercase tracking-wide">
-                Registrados ({segurosReviews.length})
-              </p>
+            <div className="relative z-10">
               {segurosReviews.length === 0 ? (
-                <p className="text-slate-600 text-sm italic">Aún no hay registros de seguros</p>
+                <p className="text-slate-500 text-sm">No hay registros aún</p>
               ) : (
-                <div className="space-y-2 max-h-72 overflow-y-auto">
-                  {segurosReviews.map((r, idx) => (
-                    <div
-                      key={r.id}
-                      className="flex items-center gap-3 bg-black border border-slate-800 rounded-lg px-4 py-3 hover:border-emerald-500/40 transition"
-                    >
-                      <span className="text-slate-500 font-mono text-sm w-6 font-bold">{idx + 1}.</span>
-                      <span className="font-medium text-white tracking-wide">{r.client_name}</span>
-                    </div>
-                  ))}
+                <div className="space-y-2">
+                  {segurosReviews.map((review, idx) => {
+                    const workerEmail = review.worker_email?.toLowerCase()
+                    const workerData = workers.find(w => w.email?.toLowerCase() === workerEmail)
+                    const workerName = workerData?.name || workerEmail?.split('@')[0] || 'unknown'
+                    return (
+                      <div
+                        key={review.id}
+                        className="flex items-center justify-between bg-black border border-slate-800 rounded-xl px-5 py-3 hover:border-emerald-500/40 transition"
+                      >
+                        <div className="flex items-center gap-4">
+                          <span className="text-slate-500 font-mono text-sm w-8">{idx + 1}.</span>
+                          <span className="font-medium tracking-wide text-white">{review.client_name}</span>
+                        </div>
+                        <span className="text-slate-600 text-xs tracking-widest">
+                          ({workerName})
+                        </span>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -408,28 +412,245 @@ export default function WorkerPage() {
 
         </div>
 
-        {/* BUTTON */}
-        <button
-          onClick={handleAdd}
-          disabled={loading || isSystemClosed}
-          className="w-full md:w-1/2 mx-auto block bg-gradient-to-r from-emerald-500 to-emerald-600 text-black font-bold py-6 rounded-xl text-lg transition hover:scale-[1.02] hover:from-emerald-400 hover:to-emerald-500 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed mb-8 shadow-[0_0_30px_rgba(16,185,129,0.3)]"
-        >
-          {loading ? '⏳ Guardando...' : isSystemClosed ? '🔒 Sistema Cerrado' : '💾 Guardar todo'}
-        </button>
+        {/* SECTION TITLE - WORKERS */}
+        <div className="flex items-center gap-4 mb-6">
+          <h2 className="text-slate-300 text-lg font-semibold tracking-wide uppercase">
+            Workers
+          </h2>
+          <div className="flex-1 h-px bg-slate-800" />
+          <span className="text-slate-600 text-sm">{workersArray.length} activos</span>
+        </div>
+
+        {/* WORKERS GRID */}
+        <div className="grid gap-5 md:grid-cols-3 mb-12">
+          {workersArray.map((worker: any) => (
+            <div
+              key={worker.name}
+              className="bg-gradient-to-br from-slate-900 to-[#0d0d14] border border-slate-800 p-7 rounded-2xl hover:border-emerald-500/30 transition-all duration-300"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-500/20 to-cyan-500/10 border border-emerald-500/20 flex items-center justify-center text-lg font-black text-emerald-400 capitalize">
+                  {worker.name.charAt(0)}
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold capitalize text-white tracking-tight">
+                    {worker.name}
+                  </h2>
+                  <p className="text-slate-600 text-xs">
+                    {worker.seguros + worker.unas} servicios totales
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mb-6">
+                <div className="bg-slate-800/50 rounded-xl p-3 text-center">
+                  <p className="text-slate-500 text-xs mb-1">Seguros</p>
+                  <p className="text-white font-black text-2xl">{worker.seguros}</p>
+                </div>
+                <div className="bg-slate-800/50 rounded-xl p-3 text-center">
+                  <p className="text-slate-500 text-xs mb-1">Uñas</p>
+                  <p className="text-white font-black text-2xl">{worker.unas}</p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex justify-between items-center py-2 px-3 rounded-lg bg-emerald-500/5 border border-emerald-500/10">
+                  <span className="text-slate-400 text-sm">Generado</span>
+                  <div className="text-right">
+                    <p className="text-emerald-400 font-bold text-sm">
+                      S/ {worker.generated.toFixed(2)}
+                    </p>
+                    <p className="text-slate-600 text-xs font-mono">
+                      ${penToUsd(worker.generated)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center py-2 px-3 rounded-lg bg-red-500/5 border border-red-500/10">
+                  <span className="text-slate-400 text-sm">Pagado</span>
+                  <div className="text-right">
+                    <p className="text-red-400 font-bold text-sm">
+                      S/ {worker.paid.toFixed(2)}
+                    </p>
+                    <p className="text-slate-600 text-xs font-mono">
+                      ${penToUsd(worker.paid)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center py-2.5 px-3 rounded-xl bg-cyan-500/5 border border-cyan-500/20">
+                  <span className="text-cyan-300 text-sm font-semibold">Ganancia</span>
+                  <div className="text-right">
+                    <p className="text-cyan-400 font-black text-base">
+                      S/ {worker.profit.toFixed(2)}
+                    </p>
+                    <p className="text-slate-500 text-xs font-mono">
+                      ${penToUsd(worker.profit)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5">
+                <div className="flex justify-between text-xs text-slate-600 mb-1.5">
+                  <span>Margen</span>
+                  <span>
+                    {worker.generated > 0
+                      ? ((worker.profit / worker.generated) * 100).toFixed(0)
+                      : 0}
+                    %
+                  </span>
+                </div>
+                <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-cyan-600 to-emerald-400 rounded-full transition-all duration-700"
+                    style={{
+                      width: `${
+                        worker.generated > 0
+                          ? Math.max(0, (worker.profit / worker.generated) * 100)
+                          : 0
+                      }%`,
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* BUTTONS SECTION */}
+        <div className="flex flex-col md:flex-row gap-4 mb-12">
+          <button
+            onClick={() => setShowResetModal(true)}
+            disabled={loading}
+            className="flex-1 px-6 py-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 font-bold text-base hover:bg-red-500/20 hover:border-red-500/50 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 uppercase tracking-wide"
+          >
+            🗑️ Reset Semanal
+          </button>
+
+          <button
+            onClick={() => setShowNewWorkerModal(true)}
+            disabled={loading}
+            className="flex-1 px-6 py-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 font-bold text-base hover:bg-emerald-500/20 hover:border-emerald-500/50 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 uppercase tracking-wide"
+          >
+            ➕ Añadir Worker
+          </button>
+        </div>
 
         {/* MESSAGE */}
         {message && (
-          <div className={`mb-8 rounded-xl border px-6 py-4 text-center text-sm max-w-md mx-auto ${messageStyles[messageType]}`}>
+          <div className={`mb-8 rounded-xl border px-6 py-4 text-center text-sm ${messageStyles[messageType]}`}>
             {message}
           </div>
         )}
 
+        {/* NEW WORKER MODAL */}
+        {showNewWorkerModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+            <div className="bg-gradient-to-br from-slate-900 to-[#0d0d14] border border-slate-800 rounded-2xl p-8 w-full max-w-md shadow-2xl">
+              <h3 className="text-2xl font-black mb-6 text-white flex items-center gap-2">
+                <span>➕</span>
+                <span>Nuevo Worker</span>
+              </h3>
+
+              <div className="space-y-4 mb-6">
+                <div>
+                  <label className="block text-slate-400 text-sm font-semibold mb-2">Nombre</label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Carlos"
+                    value={newWorkerForm.name}
+                    onChange={(e) => setNewWorkerForm({...newWorkerForm, name: e.target.value})}
+                    className="w-full bg-black border border-slate-800 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:border-emerald-500 outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 text-sm font-semibold mb-2">Email</label>
+                  <input
+                    type="email"
+                    placeholder="ej: carlos@easymoney.com"
+                    value={newWorkerForm.email}
+                    onChange={(e) => setNewWorkerForm({...newWorkerForm, email: e.target.value})}
+                    className="w-full bg-black border border-slate-800 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:border-emerald-500 outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 text-sm font-semibold mb-2">Pago Uñas (soles)</label>
+                  <input
+                    type="number"
+                    placeholder="Ej: 5"
+                    value={newWorkerForm.pago_unas}
+                    onChange={(e) => setNewWorkerForm({...newWorkerForm, pago_unas: e.target.value})}
+                    className="w-full bg-black border border-slate-800 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:border-emerald-500 outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 text-sm font-semibold mb-2">Pago Seguros (soles)</label>
+                  <input
+                    type="number"
+                    placeholder="Ej: 5"
+                    value={newWorkerForm.pago_seguros}
+                    onChange={(e) => setNewWorkerForm({...newWorkerForm, pago_seguros: e.target.value})}
+                    className="w-full bg-black border border-slate-800 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:border-emerald-500 outline-none transition"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowNewWorkerModal(false)}
+                  className="flex-1 px-4 py-3 border border-slate-700 rounded-xl text-slate-400 font-semibold hover:border-slate-600 hover:bg-slate-800/50 transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleNewWorker}
+                  disabled={loading}
+                  className="flex-1 px-4 py-3 bg-emerald-500 rounded-xl text-black font-bold hover:bg-emerald-400 transition disabled:opacity-50"
+                >
+                  Guardar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* FOOTER */}
-        <div className="text-center text-slate-700 text-xs mt-12">
-          1 USD = S/ {USD_TO_PEN} PEN
+        <div className="mt-12 text-center text-slate-700 text-xs">
+          1 USD = S/ {USD_TO_PEN} PEN · Datos en tiempo real
         </div>
 
-      </div>
-    </main>
+        {/* RESET MODAL */}
+        {showResetModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+            <div className="bg-gradient-to-br from-slate-900 to-[#0d0d14] border border-slate-800 rounded-2xl p-8 w-full max-w-md shadow-2xl">
+              <h3 className="text-2xl font-black mb-4 text-white">⚠️ Reset Semanal</h3>
+              <p className="text-slate-300 mb-6">
+                ¿Estás seguro de que quieres eliminar todas las reseñas? Esta acción no se puede deshacer.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowResetModal(false)}
+                  className="flex-1 px-4 py-3 border border-slate-700 rounded-xl text-slate-400 font-semibold hover:border-slate-600 hover:bg-slate-800/50 transition"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleConfirmReset}
+                  disabled={loading}
+                  className="flex-1 px-4 py-3 bg-red-500 rounded-xl text-white font-bold hover:bg-red-400 transition disabled:opacity-50"
+                >
+                  Eliminar todo
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </main>
+    </>
   )
 }
