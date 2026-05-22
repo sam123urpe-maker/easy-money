@@ -18,7 +18,8 @@ export default function WorkerPage() {
 
   const isDouglas = user?.email?.toLowerCase() === 'douglas@easymoney.com'
   const isJoaquin = user?.email?.toLowerCase() === 'joaquin@easymoney.com'
-  const isCane = user?.email?.toLowerCase() === 'cane@easymoney.com'   // NUEVO
+  const isCane = user?.email?.toLowerCase() === 'cane@easymoney.com'
+  const isAlvaro = user?.email?.toLowerCase() === 'alvaro@easymoney.com'   // NUEVO: ALVARO
   const USD_TO_PEN = 3.4
 
   useEffect(() => {
@@ -252,7 +253,6 @@ export default function WorkerPage() {
               />
             </div>
           )}
-          {/* NUEVO: CANE */}
           {isCane && (
             <div
               className="relative"
@@ -264,6 +264,22 @@ export default function WorkerPage() {
               <img
                 src="https://i.postimg.cc/gjDqBxyd/386c7408-cf88-4514-8b96-e1df43925531.png"
                 alt="Cane"
+                className="relative w-[520px] object-contain drop-shadow-[0_0_80px_rgba(16,185,129,0.4)]"
+              />
+            </div>
+          )}
+          {/* NUEVO: ALVARO */}
+          {isAlvaro && (
+            <div
+              className="relative"
+              style={{
+                animation: 'floatEmoji 3.5s ease-in-out infinite',
+              }}
+            >
+              <div className="absolute inset-0 bg-emerald-500/20 blur-3xl rounded-full w-[550px] h-[550px]" />
+              <img
+                src="https://i.postimg.cc/050Yyzz7/d9377b28-1872-464c-98b1-dd11aa2dcab1.png"
+                alt="Alvaro"
                 className="relative w-[520px] object-contain drop-shadow-[0_0_80px_rgba(16,185,129,0.4)]"
               />
             </div>
