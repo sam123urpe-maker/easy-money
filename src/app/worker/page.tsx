@@ -18,6 +18,7 @@ export default function WorkerPage() {
 
   const isDouglas = user?.email?.toLowerCase() === 'douglas@easymoney.com'
   const isJoaquin = user?.email?.toLowerCase() === 'joaquin@easymoney.com'
+  const isCane = user?.email?.toLowerCase() === 'cane@easymoney.com'   // NUEVO
   const USD_TO_PEN = 3.4
 
   useEffect(() => {
@@ -251,6 +252,22 @@ export default function WorkerPage() {
               />
             </div>
           )}
+          {/* NUEVO: CANE */}
+          {isCane && (
+            <div
+              className="relative"
+              style={{
+                animation: 'floatEmoji 3.5s ease-in-out infinite',
+              }}
+            >
+              <div className="absolute inset-0 bg-emerald-500/20 blur-3xl rounded-full w-[550px] h-[550px]" />
+              <img
+                src="https://i.postimg.cc/gjDqBxyd/386c7408-cf88-4514-8b96-e1df43925531.png"
+                alt="Cane"
+                className="relative w-[520px] object-contain drop-shadow-[0_0_80px_rgba(16,185,129,0.4)]"
+              />
+            </div>
+          )}
         </div>
 
         {/* CLOSED SYSTEM MESSAGE */}
@@ -260,7 +277,7 @@ export default function WorkerPage() {
             <div className="relative z-10 text-center">
               <p className="text-2xl font-black mb-4">🔒 El sistema está cerrado</p>
               <p className="text-slate-300 mb-8 text-base">
-                Puedes añadir clientes SOLO los <span className="font-bold text-emerald-400">miércoles de 3:00 PM a jueves 9:00 PM</span>
+                Puedes añadir clientes SOLO los <span className="font-bold text-emerald-400">miércoles de 3:00 PM a viernes 8:00 AM</span>
               </p>
               {timeUntilOpen && (
                 <div className="flex justify-center gap-4 md:gap-6">
