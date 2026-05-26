@@ -16,6 +16,7 @@ export default function DashboardPage() {
   const [newWorkerForm, setNewWorkerForm] = useState({
     name: '',
     email: '',
+    password: '',
     pago_unas: '',
     pago_seguros: '',
     image_url: ''
@@ -140,14 +141,39 @@ export default function DashboardPage() {
     setLoading(false)
   }
 
-  // ---- CREAR WORKER ----
+  // ---- CREAR WORKER (con usuario en Auth) ----
   async function handleNewWorker() {
-    if (!newWorkerForm.name || !newWorkerForm.email || !newWorkerForm.pago_unas || !newWorkerForm.pago_seguros) {
-      setMessage('⚠️ Completa nombre, email y pagos')
+    if (!newWorkerForm.name || !newWorkerForm.email || !newWorkerForm.password || !newWorkerForm.pago_unas || !newWorkerForm.pago_seguros) {
+      setMessage('⚠️ Completa todos los campos (nombre, email, contraseña y pagos)')
       setMessageType('warning')
       return
     }
+
     setLoading(true)
+
+    // 1. Crear usuario en Supabase Auth mediante API route
+    try {
+      const res = await fetch('/api/create-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: newWorkerForm.email.toLowerCase(),
+          password: newWorkerForm.password,
+          name: newWorkerForm.name
+        })
+      })
+      const authResult = await res.json()
+      if (!res.ok) {
+        throw new Error(authResult.error || 'Error al crear usuario')
+      }
+    } catch (err: any) {
+      setMessage(`❌ Error al crear usuario: ${err.message}`)
+      setMessageType('error')
+      setLoading(false)
+      return
+    }
+
+    // 2. Insertar en tabla workers
     const { error } = await supabase.from('workers').insert([{
       name: newWorkerForm.name,
       email: newWorkerForm.email.toLowerCase(),
@@ -155,16 +181,18 @@ export default function DashboardPage() {
       pago_seguros: parseFloat(newWorkerForm.pago_seguros),
       image_url: newWorkerForm.image_url || null
     }])
+
     if (!error) {
-      setMessage('✅ Worker agregado correctamente')
+      setMessage('✅ Worker y usuario creados correctamente')
       setMessageType('success')
-      setNewWorkerForm({ name: '', email: '', pago_unas: '', pago_seguros: '', image_url: '' })
+      setNewWorkerForm({ name: '', email: '', password: '', pago_unas: '', pago_seguros: '', image_url: '' })
       setShowNewWorkerModal(false)
       await fetchData()
     } else {
-      setMessage('❌ Error al agregar worker: ' + error.message)
+      setMessage(`❌ Error al agregar worker: ${error.message}`)
       setMessageType('error')
     }
+
     setTimeout(() => setMessage(''), 3000)
     setLoading(false)
   }
@@ -172,15 +200,28 @@ export default function DashboardPage() {
   // ---- RESET SEMANAL ----
   async function handleConfirmReset() {
     setLoading(true)
-    const { error } = await supabase.from('reviews').delete().neq('id', '')
-    if (!error) {
-      setMessage('✅ Reviews eliminadas correctamente')
+    // Verificar sesión activa
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      setMessage('🔒 No hay sesión activa. Vuelve a iniciar sesión.')
+      setMessageType('warning')
+      setLoading(false)
+      setTimeout(() => setMessage(''), 3000)
+      return
+    }
+
+    // Eliminar todas las reviews (sin condiciones)
+    const { error } = await supabase.from('reviews').delete()
+
+    if (error) {
+      console.error('Error al eliminar:', error)
+      setMessage(`❌ Error: ${error.message}`)
+      setMessageType('error')
+    } else {
+      setMessage('✅ Todas las reseñas eliminadas correctamente')
       setMessageType('success')
       setShowResetModal(false)
       await fetchData()
-    } else {
-      setMessage('❌ Error al eliminar reviews')
-      setMessageType('error')
     }
     setTimeout(() => setMessage(''), 3000)
     setLoading(false)
@@ -219,7 +260,7 @@ export default function DashboardPage() {
 
   return (
     <>
-      {/* 🤑 FLOATING EMOJI */}
+      {/* FLOATING EMOJI */}
       <div
         className="fixed top-6 right-8 z-50 select-none pointer-events-none"
         style={{
@@ -258,7 +299,6 @@ export default function DashboardPage() {
         {/* ========== STATS CARDS ========== */}
         <div className="grid gap-5 md:grid-cols-3 mb-12">
 
-          {/* TOTAL GENERADO */}
           <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 to-slate-950 border border-emerald-500/20 p-7 rounded-2xl group hover:border-emerald-500/50 transition-all duration-300">
             <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full -translate-y-10 translate-x-10 group-hover:bg-emerald-500/10 transition-all duration-500" />
             <div className="flex items-center gap-3 mb-4">
@@ -272,7 +312,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* TOTAL PAGADO */}
           <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 to-slate-950 border border-red-500/20 p-7 rounded-2xl group hover:border-red-500/50 transition-all duration-300">
             <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/5 rounded-full -translate-y-10 translate-x-10 group-hover:bg-red-500/10 transition-all duration-500" />
             <div className="flex items-center gap-3 mb-4">
@@ -289,7 +328,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* GANANCIA NETA */}
           <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 to-slate-950 border border-cyan-500/20 p-7 rounded-2xl group hover:border-cyan-500/50 transition-all duration-300">
             <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 rounded-full -translate-y-10 translate-x-10 group-hover:bg-cyan-500/10 transition-all duration-500" />
             <div className="flex items-center gap-3 mb-4">
@@ -314,7 +352,7 @@ export default function DashboardPage() {
           <div className="flex-1 h-px bg-slate-800" />
           <button
             onClick={() => setShowAddReviewModal(true)}
-            className="px-4 py-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-400 text-sm font-semibold hover:bg-emerald-500/20 hover:border-emerald-500/50 transition-all duration-300"
+            className="px-4 py-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-400 text-sm font-semibold hover:bg-emerald-500/20 transition-all duration-300"
           >
             ✚ Añadir manual
           </button>
@@ -560,12 +598,14 @@ export default function DashboardPage() {
                   <label className="block text-slate-400 text-sm font-semibold mb-2">Tipo de servicio</label>
                   <div className="grid grid-cols-2 gap-3">
                     <button
+                      type="button"
                       onClick={() => setNewReviewForm({ ...newReviewForm, service_type: 'unas' })}
                       className={`py-3 rounded-xl font-bold border transition-all ${newReviewForm.service_type === 'unas' ? 'bg-pink-500/20 border-pink-500/50 text-pink-300' : 'bg-black border-slate-800 text-slate-500 hover:border-slate-600'}`}
                     >
                       💅 Uñas
                     </button>
                     <button
+                      type="button"
                       onClick={() => setNewReviewForm({ ...newReviewForm, service_type: 'seguros' })}
                       className={`py-3 rounded-xl font-bold border transition-all ${newReviewForm.service_type === 'seguros' ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300' : 'bg-black border-slate-800 text-slate-500 hover:border-slate-600'}`}
                     >
@@ -611,6 +651,16 @@ export default function DashboardPage() {
                   />
                 </div>
                 <div>
+                  <label className="block text-slate-400 text-sm font-semibold mb-2">Contraseña</label>
+                  <input
+                    type="password"
+                    placeholder="Mínimo 6 caracteres"
+                    className="w-full bg-black border border-slate-800 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:border-emerald-500 outline-none transition"
+                    value={newWorkerForm.password}
+                    onChange={e => setNewWorkerForm({ ...newWorkerForm, password: e.target.value })}
+                  />
+                </div>
+                <div>
                   <label className="block text-slate-400 text-sm font-semibold mb-2">Pago por Uñas (soles)</label>
                   <input
                     type="number"
@@ -634,7 +684,7 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <label className="block text-slate-400 text-sm font-semibold mb-2">
-                    URL de imagen <span className="text-slate-600 font-normal">(opcional — aparece en su panel)</span>
+                    URL de imagen <span className="text-slate-600 font-normal">(opcional)</span>
                   </label>
                   <input
                     type="text"
@@ -681,7 +731,7 @@ export default function DashboardPage() {
                 </p>
               </div>
               <div className="flex gap-3">
-                <button onClick={() => setShowResetModal(false)} disabled={loading} className="flex-1 px-4 py-3 border border-slate-700 rounded-xl text-slate-400 font-semibold hover:border-slate-600 hover:bg-slate-800/50 transition disabled:opacity-50">Cancelar</button>
+                <button onClick={() => setShowResetModal(false)} disabled={loading} className="flex-1 px-4 py-3 border border-slate-700 rounded-xl text-slate-400 font-semibold hover:border-slate-600 hover:bg-slate-800/50 transition">Cancelar</button>
                 <button onClick={handleConfirmReset} disabled={loading} className="flex-1 px-4 py-3 bg-red-500 rounded-xl text-white font-bold hover:bg-red-600 transition disabled:opacity-50 flex items-center justify-center gap-2">
                   {loading ? '⏳ Eliminando...' : '🗑️ Eliminar todo'}
                 </button>
