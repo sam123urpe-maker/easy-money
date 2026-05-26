@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 
 export default function WorkerPage() {
   const [user, setUser] = useState<any>(null)
-  const [workers, setWorkers] = useState<any[]>([])
+  const [workerData, setWorkerData] = useState<any>(null)
   const [unasText, setUnasText] = useState('')
   const [segurosText, setSegurosText] = useState('')
   const [unasReviews, setUnasReviews] = useState<any[]>([])
@@ -14,13 +14,12 @@ export default function WorkerPage() {
   const [message, setMessage] = useState('')
   const [messageType, setMessageType] = useState<'success' | 'error' | 'warning'>('success')
   const [isSystemClosed, setIsSystemClosed] = useState(false)
-  const [timeUntilOpen, setTimeUntilOpen] = useState<{hours: number; minutes: number; seconds: number} | null>(null)
+  const [timeUntilOpen, setTimeUntilOpen] = useState<{ hours: number; minutes: number; seconds: number } | null>(null)
 
-  const isDouglas = user?.email?.toLowerCase() === 'douglas@easymoney.com'
-  const isJoaquin = user?.email?.toLowerCase() === 'joaquin@easymoney.com'
-  const isCane = user?.email?.toLowerCase() === 'cane@easymoney.com'
-  const isAlvaro = user?.email?.toLowerCase() === 'alvaro@easymoney.com'   // NUEVO: ALVARO
   const USD_TO_PEN = 3.4
+
+  // ✅ DINÁMICO: imagen viene de Supabase, no hardcodeado
+  const workerImageUrl = workerData?.image_url || null
 
   useEffect(() => {
     init()
@@ -31,7 +30,6 @@ export default function WorkerPage() {
       const now = new Date()
       const day = now.getDay()
       const hours = now.getHours()
-      const minutes = now.getMinutes()
 
       const isOpen = (day === 3 && hours >= 15) || (day === 4) || (day === 5 && hours < 8)
 
@@ -65,21 +63,23 @@ export default function WorkerPage() {
 
     checkSystemStatus()
     const interval = setInterval(checkSystemStatus, 1000)
-
     return () => clearInterval(interval)
   }, [])
 
   async function init() {
     const { data: { user } } = await supabase.auth.getUser()
-
     if (!user) return
-
     setUser(user)
-
     if (!user.email) return
 
-    const { data: workersData } = await supabase.from('workers').select('*')
-    setWorkers(workersData || [])
+    // ✅ Carga datos del worker desde Supabase (nombre, pagos, image_url)
+    const { data: wData } = await supabase
+      .from('workers')
+      .select('*')
+      .eq('email', user.email.toLowerCase())
+      .single()
+
+    setWorkerData(wData || null)
 
     await loadReviews(user.email)
   }
@@ -92,22 +92,14 @@ export default function WorkerPage() {
       .order('created_at', { ascending: true })
 
     if (data) {
-      const unas = data
-        .filter(r => r.service_type === 'unas')
-        .sort((a, b) => {
-          const aTime = new Date(a.created_at).getTime()
-          const bTime = new Date(b.created_at).getTime()
-          return aTime - bTime
-        })
-      const seguros = data
-        .filter(r => r.service_type === 'seguros')
-        .sort((a, b) => {
-          const aTime = new Date(a.created_at).getTime()
-          const bTime = new Date(b.created_at).getTime()
-          return aTime - bTime
-        })
-      setUnasReviews(unas)
-      setSegurosReviews(seguros)
+      setUnasReviews(
+        data.filter(r => r.service_type === 'unas')
+          .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+      )
+      setSegurosReviews(
+        data.filter(r => r.service_type === 'seguros')
+          .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+      )
     }
   }
 
@@ -123,15 +115,8 @@ export default function WorkerPage() {
     setLoading(true)
     setMessage('')
 
-    const unas = unasText
-      .split('\n')
-      .map(n => n.trim())
-      .filter(n => n !== '')
-
-    const seguros = segurosText
-      .split('\n')
-      .map(n => n.trim())
-      .filter(n => n !== '')
+    const unas = unasText.split('\n').map(n => n.trim()).filter(n => n !== '')
+    const seguros = segurosText.split('\n').map(n => n.trim()).filter(n => n !== '')
 
     const inserts = [
       ...unas.map(name => ({
@@ -157,9 +142,7 @@ export default function WorkerPage() {
       return
     }
 
-    const { error } = await supabase
-      .from('reviews')
-      .insert(inserts)
+    const { error } = await supabase.from('reviews').insert(inserts)
 
     if (error) {
       setMessage('❌ Error al guardar')
@@ -175,17 +158,14 @@ export default function WorkerPage() {
 
     await loadReviews(user.email)
     setLoading(false)
-
     setTimeout(() => setMessage(''), 3000)
   }
 
   const unasCount = unasText.split('\n').filter(n => n.trim() !== '').length
   const segurosCount = segurosText.split('\n').filter(n => n.trim() !== '').length
 
-  const currentWorker = workers.find(w => w.email?.toLowerCase() === user?.email?.toLowerCase())
-
-  const totalUnasEarned = unasReviews.length * (currentWorker?.pago_unas || 5)
-  const totalSegurosEarned = segurosReviews.length * (currentWorker?.pago_seguros || 5)
+  const totalUnasEarned = unasReviews.length * (workerData?.pago_unas || 5)
+  const totalSegurosEarned = segurosReviews.length * (workerData?.pago_seguros || 5)
 
   const messageStyles = {
     success: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400',
@@ -196,7 +176,6 @@ export default function WorkerPage() {
   return (
     <main className="min-h-screen bg-[#0a0a0f] text-white px-6 py-16 flex justify-center relative overflow-hidden">
 
-      {/* KEYFRAMES PARA EL EFECTO FLOTANTE */}
       <style>{`
         @keyframes floatEmoji {
           0%   { transform: translateY(0px) rotate(-5deg); }
@@ -207,7 +186,7 @@ export default function WorkerPage() {
 
       <div className="w-full max-w-7xl">
 
-        {/* HEADER - TÍTULO CENTRADO */}
+        {/* HEADER */}
         <div className="text-center mb-12">
           <h1 className="text-6xl md:text-7xl font-black tracking-tight">
             <span className="bg-gradient-to-r from-white via-emerald-300 to-emerald-500 bg-clip-text text-transparent drop-shadow-[0_0_30px_rgba(16,185,129,0.5)]">
@@ -221,79 +200,34 @@ export default function WorkerPage() {
           )}
         </div>
 
-        {/* ZONA DE LA IMAGEN (STICKY) - justo después del título, antes de los cuadros */}
-        <div className="sticky top-0 z-20 flex justify-center mb-12">
-          {isDouglas && (
+        {/* ✅ IMAGEN DINÁMICA DESDE SUPABASE - sticky flotante */}
+        {/* Ya no necesitas tocar el código para nuevos workers */}
+        {/* Solo pon la URL en el modal de admin al crear el worker */}
+        {workerImageUrl && (
+          <div className="sticky top-0 z-20 flex justify-center mb-12">
             <div
               className="relative"
-              style={{
-                animation: 'floatEmoji 3.5s ease-in-out infinite',
-              }}
+              style={{ animation: 'floatEmoji 3.5s ease-in-out infinite' }}
             >
               <div className="absolute inset-0 bg-emerald-500/20 blur-3xl rounded-full w-[550px] h-[550px]" />
               <img
-                src="https://i.postimg.cc/cCFwBFKQ/4d8180fd-fd29-4e5b-babe-28459bf9cb68.png"
-                alt="Douglas"
+                src={workerImageUrl}
+                alt={workerData?.name || 'Worker'}
                 className="relative w-[520px] object-contain drop-shadow-[0_0_80px_rgba(16,185,129,0.4)]"
               />
             </div>
-          )}
-          {isJoaquin && (
-            <div
-              className="relative"
-              style={{
-                animation: 'floatEmoji 3.5s ease-in-out infinite',
-              }}
-            >
-              <div className="absolute inset-0 bg-emerald-500/20 blur-3xl rounded-full w-[550px] h-[550px]" />
-              <img
-                src="https://i.postimg.cc/6ph8D0Kg/4e1775c7-7f98-4d9e-8cd6-11c1110d4eaa.png"
-                alt="Joaquin"
-                className="relative w-[520px] object-contain drop-shadow-[0_0_80px_rgba(16,185,129,0.4)]"
-              />
-            </div>
-          )}
-          {isCane && (
-            <div
-              className="relative"
-              style={{
-                animation: 'floatEmoji 3.5s ease-in-out infinite',
-              }}
-            >
-              <div className="absolute inset-0 bg-emerald-500/20 blur-3xl rounded-full w-[550px] h-[550px]" />
-              <img
-                src="https://i.postimg.cc/gjDqBxyd/386c7408-cf88-4514-8b96-e1df43925531.png"
-                alt="Cane"
-                className="relative w-[520px] object-contain drop-shadow-[0_0_80px_rgba(16,185,129,0.4)]"
-              />
-            </div>
-          )}
-          {/* NUEVO: ALVARO */}
-          {isAlvaro && (
-            <div
-              className="relative"
-              style={{
-                animation: 'floatEmoji 3.5s ease-in-out infinite',
-              }}
-            >
-              <div className="absolute inset-0 bg-emerald-500/20 blur-3xl rounded-full w-[550px] h-[550px]" />
-              <img
-                src="https://i.postimg.cc/050Yyzz7/d9377b28-1872-464c-98b1-dd11aa2dcab1.png"
-                alt="Alvaro"
-                className="relative w-[520px] object-contain drop-shadow-[0_0_80px_rgba(16,185,129,0.4)]"
-              />
-            </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* CLOSED SYSTEM MESSAGE */}
+        {/* SISTEMA CERRADO */}
         {isSystemClosed && (
           <div className="mb-12 relative overflow-hidden bg-gradient-to-br from-red-950 to-slate-950 border border-red-500/30 p-8 rounded-2xl">
             <div className="absolute top-0 right-0 w-40 h-40 bg-red-500/10 rounded-full -translate-y-10 translate-x-10" />
             <div className="relative z-10 text-center">
               <p className="text-2xl font-black mb-4">🔒 El sistema está cerrado</p>
               <p className="text-slate-300 mb-8 text-base">
-                Puedes añadir clientes SOLO los <span className="font-bold text-emerald-400">miércoles de 3:00 PM a viernes 8:00 AM</span>
+                Puedes añadir clientes SOLO los{' '}
+                <span className="font-bold text-emerald-400">miércoles de 3:00 PM a viernes 8:00 AM</span>
               </p>
               {timeUntilOpen && (
                 <div className="flex justify-center gap-4 md:gap-6">
@@ -321,7 +255,6 @@ export default function WorkerPage() {
           {/* UÑAS CARD */}
           <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 to-[#0d0d14] p-8 hover:border-emerald-500/30 transition-all duration-300 shadow-[0_0_40px_rgba(0,0,0,0.6)]">
             <div className="absolute top-0 right-0 w-40 h-40 bg-pink-500/5 rounded-full -translate-y-10 translate-x-10" />
-
             <div className="relative z-10 mb-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-3xl font-black tracking-tight flex items-center gap-2">
@@ -344,10 +277,11 @@ export default function WorkerPage() {
               <div className="mt-4 p-5 bg-emerald-500/5 border border-emerald-500/10 rounded-xl">
                 <p className="text-slate-400 text-sm mb-2 font-semibold">Total ganado en Uñas</p>
                 <p className="text-3xl font-black text-emerald-400">S/ {totalUnasEarned.toFixed(2)}</p>
+                <p className="text-slate-600 text-xs mt-1 font-mono">≈ ${(totalUnasEarned / USD_TO_PEN).toFixed(2)} USD</p>
               </div>
             </div>
 
-            {/* UÑAS LIST */}
+            {/* LISTA UÑAS */}
             <div className="relative z-10 mt-6 pt-6 border-t border-slate-800">
               <p className="text-slate-400 text-sm mb-4 font-semibold uppercase tracking-wide">
                 Registrados ({unasReviews.length})
@@ -373,7 +307,6 @@ export default function WorkerPage() {
           {/* SEGUROS CARD */}
           <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 to-[#0d0d14] p-8 hover:border-emerald-500/30 transition-all duration-300 shadow-[0_0_40px_rgba(0,0,0,0.6)]">
             <div className="absolute top-0 right-0 w-40 h-40 bg-cyan-500/5 rounded-full -translate-y-10 translate-x-10" />
-
             <div className="relative z-10 mb-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-3xl font-black tracking-tight flex items-center gap-2">
@@ -396,10 +329,11 @@ export default function WorkerPage() {
               <div className="mt-4 p-5 bg-emerald-500/5 border border-emerald-500/10 rounded-xl">
                 <p className="text-slate-400 text-sm mb-2 font-semibold">Total ganado en Seguros</p>
                 <p className="text-3xl font-black text-emerald-400">S/ {totalSegurosEarned.toFixed(2)}</p>
+                <p className="text-slate-600 text-xs mt-1 font-mono">≈ ${(totalSegurosEarned / USD_TO_PEN).toFixed(2)} USD</p>
               </div>
             </div>
 
-            {/* SEGUROS LIST */}
+            {/* LISTA SEGUROS */}
             <div className="relative z-10 mt-6 pt-6 border-t border-slate-800">
               <p className="text-slate-400 text-sm mb-4 font-semibold uppercase tracking-wide">
                 Registrados ({segurosReviews.length})
@@ -424,7 +358,7 @@ export default function WorkerPage() {
 
         </div>
 
-        {/* BUTTON */}
+        {/* BOTÓN GUARDAR TODO */}
         <button
           onClick={handleAdd}
           disabled={loading || isSystemClosed}
